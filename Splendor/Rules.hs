@@ -3,13 +3,18 @@ module Splendor.Rules where
 
 import Control.Lens
 import Control.Monad.State
+import Control.Monad.Random.Class
 import Data.Foldable
 import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid
+import qualified Data.Vector as Vector
+import System.Random.Shuffle
+
 import Splendor.Types
+import Splendor.Data
 
 illegal :: StateT s Maybe a
 illegal = lift Nothing
@@ -404,3 +409,74 @@ checkEndOfGame = do
         pure (Just (GameWinners winners))
     else
         pure Nothing
+
+initState :: MonadRandom m => Int -> m (Maybe GameState)
+initState n = do
+    tier1CardOrder <- shuffleM tier1CardSet
+    tier2CardOrder <- shuffleM tier2CardSet
+    tier3CardOrder <- shuffleM tier3CardSet
+    let numCards1 = length tier1CardOrder
+        numCards2 = length tier2CardOrder
+        numCards3 = length tier3CardOrder
+        tier1Deck = zipWith (\card i -> card & cardId .~ CardId i) tier1CardOrder [1 .. numCards1]
+        tier2Deck = zipWith (\card i -> card & cardId .~ CardId i) tier2CardOrder [numCards1 + 1 .. numCards1 + numCards2]
+        tier3Deck = zipWith (\card i -> card & cardId .~ CardId i) tier3CardOrder [numCards1 + numCards2 + 1 .. numCards1 + numCards2 + numCards3]
+    playNobles <- take (n+1) <$> shuffleM nobleSet
+    if n < 2 || n > 4
+    then
+        pure Nothing
+    else
+        pure . Just $ GameState
+            { _numPlayers = n
+            , _playerStates = Vector.replicate n $ PlayerState
+                { _heldChips = Map.empty
+                , _ownedCards = []
+                , _ownedCardCounts = Map.empty
+                , _reservedCards = []
+                , _ownedNobles = []
+                , _currentVP = 0
+                }
+            , _availableChips =
+                case n of
+                    2 -> Map.fromList
+                       [ (Basic Green, 4)
+                       , (Basic Blue, 4)
+                       , (Basic Red, 4)
+                       , (Basic White, 4)
+                       , (Basic Black, 4)
+                       , (Gold, 5)
+                       ]
+                    3 -> Map.fromList
+                        [ (Basic Green, 5)
+                        , (Basic Blue, 5)
+                        , (Basic Red, 5)
+                        , (Basic White, 5)
+                        , (Basic Black, 5)
+                        , (Gold, 5)
+                        ]
+                    4 -> Map.fromList
+                        [ (Basic Green, 7)
+                        , (Basic Blue, 7)
+                        , (Basic Red, 7)
+                        , (Basic White, 7)
+                        , (Basic Black, 7)
+                        , (Gold, 5)
+                        ]
+            , _availableNobles = playNobles
+            , _tier1State = TierState
+                { _availableCards = take 4 tier1Deck
+                , _tierDeck = drop 4 tier1Deck
+                }
+            , _tier2State = TierState
+                { _availableCards = take 4 tier2Deck
+                , _tierDeck = drop 4 tier2Deck
+                }
+            , _tier3State = TierState
+                { _availableCards = take 4 tier3Deck
+                , _tierDeck = drop 4 tier3Deck
+                }
+            , _currentRequest = ActionRequest
+                { _requestPlayer = 0
+                , _requestType = TurnRequest
+                }
+            }
