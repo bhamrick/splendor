@@ -22,10 +22,11 @@ illegal = lift Nothing
 withDefault :: a -> (a -> b) -> Maybe a -> Maybe b
 withDefault def f = Just . f . fromMaybe def
 
-runAction :: Action -> GameState -> Maybe (Maybe GameResult, GameState)
-runAction a =
+runAction :: Int -> Action -> GameState -> Maybe (Maybe GameResult, GameState)
+runAction idx a =
     runStateT $ do
         curTurn <- use (currentRequest . requestPlayer)
+        when (idx /= curTurn) illegal
         curReqType <- use (currentRequest . requestType)
         case curReqType of
             TurnRequest -> do

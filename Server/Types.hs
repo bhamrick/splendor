@@ -1,13 +1,17 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Server.Types where
 
 import Control.Lens
 import Data.Aeson
 import Data.ByteString (ByteString)
-import Data.Map (Map)
+import Data.Map (Map, mapKeys)
+import qualified Data.Map as Map
 import Data.Text (Text)
+import Data.Traversable
 import GHC.Generics
+import Text.Read
 import Splendor.Types
 
 data PlayerInfo =
@@ -25,7 +29,23 @@ data RunningGame a =
         , _version :: Int
         , _gameState :: a
         }
-    deriving (Eq, Show, Ord)
+    deriving (Eq, Show, Ord, Generic)
+
+instance ToJSON (Map Int PlayerInfo) where
+    toJSON = toJSON . mapKeys show
+    toEncoding = toEncoding . mapKeys show
+
+instance FromJSON (Map Int PlayerInfo) where
+    parseJSON val = do
+        m <- parseJSON val
+        assocList <- for (Map.toList m) $ \(k, v) -> do
+            case readMaybe k of
+                Nothing -> fail "Invalid color"
+                Just c -> pure (c, v)
+        pure (Map.fromList assocList)
+
+instance ToJSON a => ToJSON (RunningGame a)
+instance FromJSON a => FromJSON (RunningGame a)
 
 data Instance a =
     Instance
@@ -37,6 +57,7 @@ data Instance a =
 data Lobby a =
     Lobby
         { _waitingPlayers :: [(String, PlayerInfo)]
+        , _ownerKey :: String
         }
     deriving (Eq, Show, Ord)
 
@@ -51,11 +72,12 @@ instance ToJSON a => ToJSON (ServerRequest a)
 instance FromJSON a => FromJSON (ServerRequest a)
 
 data RequestData
-    = GameAction Action
-    | NewLobby
+    = ListLobbies
+    | NewLobby PlayerInfo
     | JoinLobby String PlayerInfo
-    | ListLobbies
+    | StartGame String
     | GetGameState String
+    | GameAction String Action
     deriving (Eq, Show, Ord, Generic)
 
 instance ToJSON RequestData
@@ -73,3 +95,4 @@ makeLenses ''RunningGame
 makeLenses ''Instance
 makeLenses ''Lobby
 makeLenses ''ServerState
+makeLenses ''ServerRequest
