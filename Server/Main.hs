@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Server.Main where
+module Main where
 
 import Control.Concurrent.STM
 import Control.Lens
@@ -9,8 +9,11 @@ import qualified Data.ByteString as ByteString
 import qualified Data.Map as Map
 import System.Random.Shuffle
 
-import Network.Wai
 import Network.HTTP.Types
+import Network.Wai
+import Network.Wai.Handler.Warp
+
+import Lucid
 
 import Splendor.Types
 import Splendor.Rules
@@ -83,6 +86,14 @@ work svar req = do
                     else
                         pure $ responseLBS status200 [("Content-Type", "text/plain")] ""
 
+mainPage :: Html()
+mainPage = do
+    doctype_
+    head_ $ do
+        title_ "Splendor Server"
+    body_ $ do
+        "Hello"
+
 serverApplication :: IO (Request -> IO Response)
 serverApplication = do
     svar <- newTVarIO $ ServerState
@@ -92,9 +103,14 @@ serverApplication = do
     pure $ \request -> do
         if requestMethod request == methodGet
         then do
-            undefined
+            pure $ responseLBS status200 [("Content-Type", "text/html")] (renderBS mainPage)
         else do
             bod <- lazyRequestBody request
             case decode bod of
-                Nothing -> undefined
+                Nothing -> pure $ responseLBS status400 [("Content-Type", "text/plain")] ""
                 Just req -> work svar req
+
+main :: IO ()
+main = do
+    app <- serverApplication
+    runEnv 8080 (\req cb -> app req >>= cb)
