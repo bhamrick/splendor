@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -29,7 +30,7 @@ data RunningGame a =
         , _version :: Int
         , _gameState :: a
         }
-    deriving (Eq, Show, Ord, Generic)
+    deriving (Eq, Show, Ord, Functor, Generic)
 
 instance ToJSON (Map Int PlayerInfo) where
     toJSON = toJSON . mapKeys show

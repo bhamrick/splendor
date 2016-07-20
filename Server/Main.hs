@@ -56,7 +56,13 @@ work svar req = do
             pure $ responseLBS status200 [("Content-Type", "application/json")] (encode (fmap (map snd . view waitingPlayers) (servState^.lobbies)))
         GetGameState gameKey -> do
             servState <- readTVarIO svar
-            pure $ responseLBS status200 [("Content-Type", "application/json")] (encode (servState^?instances.ix gameKey.runningGame))
+            let maybeInst = servState^?instances.ix gameKey
+            case maybeInst of
+                Nothing -> pure $ responseLBS status404 [("Content-Type", "text/plain")] ""
+                Just inst -> do
+                    case inst^.playerKeys.at (req^.playerKey) of
+                        Nothing -> pure $ responseLBS status400 [("Content-Type", "text/plain")] ""
+                        Just pos -> pure $ responseLBS status200 [("Content-Type", "application/json")] (encode (fmap (viewGame pos) (inst^.runningGame)))
         StartGame lobbyKey -> do
             lobbyData <- do
                 servState <- readTVarIO svar
