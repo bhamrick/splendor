@@ -481,3 +481,36 @@ initState n = do
                 , _requestType = TurnRequest
                 }
             }
+
+viewPlayer :: PlayerState -> PlayerView
+viewPlayer p =
+    PlayerView
+        { _pvHeldChips = p^.heldChips
+        , _pvOwnedCards = p^.ownedCards
+        , _pvOwnedCardCounts = p^.ownedCardCounts
+        , _pvReservedCardCount = length (p^.reservedCards)
+        , _pvOwnedNobles = p^.ownedNobles
+        , _pvCurrentVP = p^.currentVP
+        }
+
+viewTier :: TierState -> TierView
+viewTier t =
+    TierView
+        { _tvAvailableCards = t^.availableCards
+        , _tvDeckCount = length (t^.tierDeck)
+        }
+
+viewGame :: Int -> GameState -> GameView
+viewGame pos g =
+    GameView
+        { _gvNumPlayers = g^.numPlayers
+        , _gvPlayerPosition = pos
+        , _gvPlayerState = (g^.playerStates) Vector.! pos
+        , _gvOpponentViews = map (\i -> viewPlayer ((g^.playerStates) Vector.! i)) ([pos+1 .. g^.numPlayers-1] <> [0 .. pos-1])
+        , _gvAvailableChips = g^.availableChips
+        , _gvAvailableNobles = g^.availableNobles
+        , _gvTier1View = viewTier (g^.tier1State)
+        , _gvTier2View = viewTier (g^.tier2State)
+        , _gvTier3View = viewTier (g^.tier3State)
+        , _gvCurrentRequest = g^.currentRequest
+        }

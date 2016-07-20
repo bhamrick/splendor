@@ -10,6 +10,7 @@ import Data.Map (Map, mapKeys)
 import qualified Data.Map as Map
 import Data.Traversable
 import Data.Vector (Vector)
+import qualified Data.Vector as V
 import Text.Read
 import GHC.Generics
 
@@ -120,6 +121,20 @@ data PlayerState
 instance ToJSON PlayerState
 instance FromJSON PlayerState
 
+data PlayerView
+    = PlayerView
+        { _pvHeldChips :: Map ChipType Int
+        , _pvOwnedCards :: [Card]
+        , _pvOwnedCardCounts :: Map Color Int
+        , _pvReservedCardCount :: Int
+        , _pvOwnedNobles :: [Noble]
+        , _pvCurrentVP :: Int
+        }
+    deriving (Eq, Show, Ord, Generic)
+
+instance ToJSON PlayerView
+instance FromJSON PlayerView
+
 data TierState
     = TierState
         { _availableCards :: [Card]
@@ -129,6 +144,16 @@ data TierState
 
 instance ToJSON TierState
 instance FromJSON TierState
+
+data TierView
+    = TierView
+        { _tvAvailableCards :: [Card]
+        , _tvDeckCount :: Int
+        }
+    deriving (Eq, Show, Ord, Generic)
+
+instance ToJSON TierView
+instance FromJSON TierView
 
 data ActionRequestType
     = TurnRequest
@@ -172,9 +197,30 @@ data GameResult
 instance ToJSON GameResult
 instance FromJSON GameResult
 
+data GameView
+    = GameView
+        { _gvNumPlayers :: Int
+        , _gvPlayerPosition :: Int
+        , _gvPlayerState :: PlayerState
+        , _gvOpponentViews :: [PlayerView]
+        , _gvAvailableChips :: Map ChipType Int
+        , _gvAvailableNobles :: [Noble]
+        , _gvTier1View :: TierView
+        , _gvTier2View :: TierView
+        , _gvTier3View :: TierView
+        , _gvCurrentRequest :: ActionRequest
+        }
+    deriving (Eq, Show, Ord, Generic)
+
+instance ToJSON GameView
+instance FromJSON GameView
+
 makeLenses ''Card
 makeLenses ''Noble
 makeLenses ''ActionRequest
 makeLenses ''PlayerState
 makeLenses ''TierState
 makeLenses ''GameState
+makeLenses ''PlayerView
+makeLenses ''TierView
+makeLenses ''GameView
