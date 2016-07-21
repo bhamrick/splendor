@@ -62,6 +62,15 @@ data Lobby a =
         }
     deriving (Eq, Show, Ord)
 
+data LobbyView =
+    LobbyView
+        { _lvWaitingPlayers :: [PlayerInfo]
+        }
+    deriving (Eq, Show, Ord, Generic)
+
+instance ToJSON LobbyView
+instance FromJSON LobbyView
+
 data ServerRequest a =
     ServerRequest
         { _playerKey :: String
