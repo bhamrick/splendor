@@ -2,10 +2,28 @@ module Main where
 
 import Prelude
 import Control.Monad.Eff (Eff)
-import Control.Monad.Eff.Console (CONSOLE, log)
+import Control.Monad.Eff.Random
 
+import Browser.LocalStorage
+import Thermite as T
+import DOM (DOM)
+import DOM.HTML (window) as DOM
+import DOM.HTML.Types (htmlDocumentToParentNode) as DOM
+import DOM.HTML.Window (document) as DOM
+import DOM.Node.ParentNode (querySelector) as DOM
+import React as R
+import ReactDOM as RDOM
+import Data.Maybe (fromJust)
+import Data.Nullable (toMaybe)
+import Partial.Unsafe (unsafePartial)
+
+import Components.Client as Client
 import Splendor.Types
 
-main :: forall e. Eff (console :: CONSOLE | e) Unit
-main = do
-  log "Hello sailor!"
+main :: forall e. Eff (dom :: DOM, storage :: STORAGE, random :: RANDOM | e) Unit
+main = void do
+    initialClientState <- Client.initializeState
+    let component = T.createClass Client.spec initialClientState
+    document <- DOM.window >>= DOM.document
+    container <- unsafePartial (fromJust <<< toMaybe <$> DOM.querySelector "#client" (DOM.htmlDocumentToParentNode document))
+    RDOM.render (R.createFactory component {}) container
