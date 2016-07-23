@@ -635,6 +635,8 @@ newtype PlayerInfo = PlayerInfo
     { displayName :: String
     }
 
+derive instance genericPlayerInfo :: Generic PlayerInfo
+
 instance decodeJsonPlayerInfo :: DecodeJson PlayerInfo where
     decodeJson json = do
         obj <- decodeJson json

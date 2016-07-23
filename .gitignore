@@ -2,3 +2,4 @@ dist/
 .cabal-sandbox/
 client/output/
 client/bower_components/
+client/client.js
