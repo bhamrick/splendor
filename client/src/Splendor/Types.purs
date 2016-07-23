@@ -679,6 +679,8 @@ newtype LobbyView = LobbyView
     { waitingPlayers :: Array PlayerInfo
     }
 
+derive instance genericLobbyView :: Generic LobbyView
+
 instance decodeJsonLobbyView :: DecodeJson LobbyView where
     decodeJson json = do
         obj <- decodeJson json

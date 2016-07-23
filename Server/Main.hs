@@ -2,11 +2,17 @@
 module Main where
 
 import Control.Concurrent.STM
+import Control.Exception
 import Control.Lens
+import Control.Monad (guard)
 import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Lazy
 import qualified Data.Map as Map
+import Data.String
+import System.FilePath
+import System.IO.Error
 import System.Random.Shuffle
 
 import Network.HTTP.Types
@@ -44,7 +50,7 @@ work svar req = do
                         { _waitingPlayers = [(req^.playerKey, pInfo)]
                         , _ownerKey = req^.playerKey
                         })
-            pure $ responseLBS status200 [("Content-Type", "text/plain")] ""
+            pure $ responseLBS status200 [("Content-Type", "text/plain")] (encode newLobbyId)
         JoinLobby lobbyKey pInfo -> do
             newLobbyId <- newIdentifier
             atomically $ do
@@ -92,13 +98,35 @@ work svar req = do
                     else
                         pure $ responseLBS status200 [("Content-Type", "text/plain")] ""
 
-mainPage :: Html()
+mainPage :: Html ()
 mainPage = do
     doctype_
     head_ $ do
         title_ "Splendor Server"
     body_ $ do
-        "Hello"
+        div_ [id_ "client"] $ do
+            script_ [src_ "client.js"] ("" :: ByteString)
+
+contentType :: IsString a => String -> a
+contentType ext = case ext of
+    ".css"  -> "text/css"
+    ".gif"  -> "image/gif"
+    ".jpeg" -> "image/jpeg"
+    ".jpg"  -> "image/jpeg"
+    ".js"   -> "application/javascript"
+    ".json" -> "application/json"
+    ".pdf"  -> "application/pdf"
+    ".png"  -> "image/png"
+    ".ps"   -> "application/postscript"
+    ".txt"  -> "text/plain"
+    _       -> "application/unknown"
+
+serveFile :: FilePath -> Request -> IO Response
+serveFile path req = do
+    r <- tryJust (guard . isDoesNotExistError) $ Data.ByteString.Lazy.readFile path
+    return $ case r of
+        Left error      -> responseLBS status404 [("Content-Type", "text/plain")] ""
+        Right content   -> responseLBS status200 [("Content-Type", contentType . takeExtension $ path)] content
 
 serverApplication :: IO (Request -> IO Response)
 serverApplication = do
@@ -109,7 +137,10 @@ serverApplication = do
     pure $ \request -> do
         if requestMethod request == methodGet
         then do
-            pure $ responseLBS status200 [("Content-Type", "text/html")] (renderBS mainPage)
+            case pathInfo request of
+                [] -> pure $ responseLBS status200 [("Content-Type", "text/html")] (renderBS mainPage)
+                ["client.js"] -> serveFile "client/client.js" request
+                _ -> pure $ responseLBS status404 [("Content-Type", "text/plain")] ""
         else do
             bod <- lazyRequestBody request
             case decode bod of
