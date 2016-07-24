@@ -22,6 +22,7 @@
     "purescript-react": "^1.1.0",
     "purescript-random": "^1.0.0",
     "purescript-profunctor-lenses": "^1.0.0",
-    "purescript-affjax": "^1.1.0"
+    "purescript-affjax": "^1.1.0",
+    "purescript-tailrec": "^1.0.0"
   }
 }

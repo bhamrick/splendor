@@ -1,6 +1,7 @@
 module Main where
 
 import Prelude
+import Control.Monad.Aff
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Random
 
@@ -23,7 +24,10 @@ import Splendor.Types
 main :: forall e. Eff (dom :: DOM, storage :: STORAGE, random :: RANDOM | e) Unit
 main = void do
     initialClientState <- Client.initializeState
-    let component = T.createClass Client.spec initialClientState
+    let reactSpec = (T.createReactSpec Client.spec initialClientState).spec
+    let reactSpec' = reactSpec
+            { componentWillMount = \rthis -> void $ launchAff (Client.backgroundWork rthis) }
+    let component = R.createClass reactSpec'
     document <- DOM.window >>= DOM.document
     container <- unsafePartial (fromJust <<< toMaybe <$> DOM.querySelector "#client" (DOM.htmlDocumentToParentNode document))
     RDOM.render (R.createFactory component {}) container

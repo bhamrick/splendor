@@ -8,8 +8,12 @@ import React.DOM as R
 import React.DOM.Props as RP
 
 import Browser.LocalStorage
+import Control.Monad.Aff
 import Control.Monad.Eff
+import Control.Monad.Eff.Class
+import Control.Monad.Eff.Console
 import Control.Monad.Eff.Random
+import Control.Monad.Rec.Class
 import Control.Monad.Trans
 import Data.Argonaut
 import Data.Either
@@ -33,6 +37,7 @@ type ClientState =
     { clientKey :: String
     , playerInfo :: PlayerInfo
     , lobbyList :: StrMap LobbyView
+    , currentLobby :: Maybe String
     }
 
 _playerInfo :: forall a b r. Lens { playerInfo :: a | r } { playerInfo :: b | r } a b
@@ -40,7 +45,6 @@ _playerInfo = lens _.playerInfo (_ { playerInfo = _ })
 
 data ClientAction
     = OnPlayerInfo PlayerInfo.PlayerInfoAction
-    | RefreshLobbies
     | NewLobbyAction
     | JoinLobbyAction String
 
@@ -76,7 +80,30 @@ initializeState = do
         { clientKey: key
         , playerInfo: pInfo
         , lobbyList: StrMap.empty :: StrMap LobbyView
+        , currentLobby: Nothing
         }
+
+backgroundWork :: forall e. R.ReactThis _ ClientState -> Aff ( ajax :: AJAX, console :: CONSOLE | e ) Unit
+backgroundWork rthis = forever do
+    refreshLobbies rthis
+    later' 1000 (pure unit)
+
+refreshLobbies :: forall e. R.ReactThis _ ClientState -> Aff _ Unit
+refreshLobbies rthis = do
+    s <- liftEff $ R.readState rthis
+    dat <- do
+        res <- post "/" (encodeJson (ServerRequest
+            { playerKey: s.clientKey
+            , requestData: ListLobbies
+            }))
+        if res.status == StatusCode 200
+            then pure $ either (const Nothing) Just (decodeJson (res.response))
+            else pure Nothing
+    liftEff $ logShow dat
+    case dat of
+        Nothing -> pure unit
+        Just lobbies -> do
+            liftEff $ R.transformState rthis (\state -> state { lobbyList = lobbies })
 
 -- Lifted specs for subcomponents
 pInfoSpec = T.focusState _playerInfo PlayerInfo.spec
@@ -90,10 +117,22 @@ render dispatch p state _ =
             ]
         , R.div' $ (view T._render pInfoSpec) (dispatch <<< OnPlayerInfo)  p state []
         , R.div' $ foldMap (\(Tuple lobbyKey lobbyView) ->
-            [ R.text "Lobby: "
-            , R.text lobbyKey
-            , R.text $ gShow lobbyView
+            [ R.div' $
+                [ R.text "Lobby: "
+                , R.text lobbyKey
+                , R.text $ gShow lobbyView
+                , R.button
+                    [ RP.onClick \_ -> dispatch (JoinLobbyAction lobbyKey)
+                    ]
+                    [ R.text "Join"
+                    ]
+                ]
             ]) (StrMap.toList state.lobbyList)
+        , R.button
+            [ RP.onClick \_ -> dispatch NewLobbyAction
+            ]
+            [ R.text "New Game"
+            ]
         ]
     ]
 
@@ -102,21 +141,16 @@ performAction a p s =
     case a of
         OnPlayerInfo a' -> do
             (view T._performAction pInfoSpec) a' p s
-        RefreshLobbies -> do
-            dat <- lift $ do
+        NewLobbyAction -> do
+            newLobbyKey <- lift $ do
                 res <- post "/" (encodeJson (ServerRequest
                     { playerKey: s.clientKey
-                    , requestData: ListLobbies
+                    , requestData: NewLobby s.playerInfo
                     }))
                 if res.status == StatusCode 200
                     then pure $ either (const Nothing) Just (decodeJson (res.response))
                     else pure Nothing
-            case dat of
-                Nothing -> pure unit
-                Just lobbies -> do
-                    void $ T.cotransform (\state -> state { lobbyList = lobbies })
-        NewLobbyAction -> do
-            pure unit
+            void $ T.cotransform (\state -> state { currentLobby = newLobbyKey })
         JoinLobbyAction lobbyKey -> do
             pure unit
 

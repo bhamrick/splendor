@@ -681,18 +681,18 @@ newtype LobbyView = LobbyView
 
 derive instance genericLobbyView :: Generic LobbyView
 
+instance showLobbyView :: Show LobbyView where
+    show = gShow
+
 instance decodeJsonLobbyView :: DecodeJson LobbyView where
     decodeJson json = do
-        obj <- decodeJson json
-        waitingPlayers <- obj .? "_lvWaitingPlayers"
+        waitingPlayers <- decodeJson json
         pure $ LobbyView
             { waitingPlayers: waitingPlayers
             }
 
 instance encodeJsonLobbyView :: EncodeJson LobbyView where
-    encodeJson (LobbyView lv) =
-        "_lvWaitingPlayers" := lv.waitingPlayers
-        ~> jsonEmptyObject
+    encodeJson (LobbyView lv) = encodeJson lv.waitingPlayers
 
 newtype ServerRequest a = ServerRequest
     { playerKey :: String
