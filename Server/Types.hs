@@ -85,6 +85,7 @@ data RequestData
     = ListLobbies
     | NewLobby PlayerInfo
     | JoinLobby String PlayerInfo
+    | LeaveLobby String
     | StartGame String
     | GetGameState String
     | GameAction String Action

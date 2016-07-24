@@ -719,6 +719,7 @@ data RequestData
     = ListLobbies
     | NewLobby PlayerInfo
     | JoinLobby String PlayerInfo
+    | LeaveLobby String
     | StartGame String
     | GetGameState String
     | GameAction String Action
@@ -735,6 +736,9 @@ instance decodeJsonRequestData :: DecodeJson RequestData where
             "JoinLobby" -> do
                 Tuple lobbyKey pInfo <- obj .? "contents"
                 pure $ JoinLobby lobbyKey pInfo
+            "LeaveLobby" -> do
+                lobbyKey <- obj .? "contents"
+                pure $ LeaveLobby lobbyKey
             "StartGame" -> do
                 lobbyKey <- obj .? "contents"
                 pure $ StartGame lobbyKey
@@ -760,6 +764,10 @@ instance encodeJsonRequestData :: EncodeJson RequestData where
             JoinLobby lobbyKey pInfo ->
                 "tag" := "JoinLobby"
                 ~> "contents" := Tuple lobbyKey pInfo
+                ~> jsonEmptyObject
+            LeaveLobby lobbyKey ->
+                "tag" := "LeaveLobby"
+                ~> "contents" := lobbyKey
                 ~> jsonEmptyObject
             StartGame lobbyKey ->
                 "tag" := "StartGame"

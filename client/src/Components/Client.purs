@@ -48,6 +48,7 @@ data ClientAction
     = OnPlayerInfo PlayerInfo.PlayerInfoAction
     | NewLobbyAction
     | JoinLobbyAction String
+    | LeaveLobbyAction
 
 newKey :: forall e. Eff (random :: RANDOM | e) String
 newKey = go 40
@@ -163,6 +164,11 @@ render dispatch p state _ =
                 Just lobbyKey ->
                     [ R.text "In lobby placeholder: "
                     , R.text lobbyKey
+                    , R.button
+                        [ RP.onClick \_ -> dispatch LeaveLobbyAction
+                        ]
+                        [ R.text "Leave Game"
+                        ]
                     ]
         Just game ->
             [ R.text "Ingame placeholder" ]
@@ -193,6 +199,20 @@ performAction a p s =
                 then do
                     void $ T.cotransform (\state -> state { currentLobbyKey = Just lobbyKey })
                 else pure unit
+        LeaveLobbyAction -> do
+            case s.currentLobbyKey of
+                Nothing -> pure unit
+                Just lobbyKey -> do
+                    success <- lift $ do
+                        (res :: AffjaxResponse String) <- post "/" (encodeJson (ServerRequest
+                            { playerKey: s.clientKey
+                            , requestData: LeaveLobby lobbyKey
+                            }))
+                        pure $ res.status == StatusCode 200
+                    if success
+                        then do
+                            void $ T.cotransform (\state -> state { currentLobbyKey = Nothing })
+                        else pure unit
 
 spec :: T.Spec _ ClientState _ ClientAction
 spec = T.simpleSpec performAction render

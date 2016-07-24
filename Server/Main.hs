@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
@@ -43,18 +44,34 @@ work svar req = do
                                     writeTVar svar (servState & instances . ix gameKey . runningGame . gameState .~ gs')
                                     pure $ responseLBS status200 [("Content-Type", "application/json")] (encode (res, gs'))
         NewLobby pInfo -> do
-            newLobbyId <- newIdentifier
-            atomically $ do
-                modifyTVar svar $
-                    lobbies . at newLobbyId .~ Just (Lobby
-                        { _waitingPlayers = [(req^.playerKey, pInfo)]
-                        , _ownerKey = req^.playerKey
-                        })
-            pure $ responseLBS status200 [("Content-Type", "application/json")] (encode newLobbyId)
+            servState <- atomically $ readTVar svar
+            if any (\lob -> lob^.ownerKey == req^.playerKey) (servState^.lobbies)
+            then
+                pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
+            else do
+                newLobbyId <- newIdentifier
+                atomically $ do
+                    modifyTVar svar $
+                        lobbies . at newLobbyId .~ Just (Lobby
+                            { _waitingPlayers = [(req^.playerKey, pInfo)]
+                            , _ownerKey = req^.playerKey
+                            })
+                pure $ responseLBS status200 [("Content-Type", "application/json")] (encode newLobbyId)
         JoinLobby lobbyKey pInfo -> do
             atomically $ do
                 modifyTVar svar $
-                    lobbies . ix lobbyKey . waitingPlayers %~ (:) (req^.playerKey, pInfo)
+                    lobbies . ix lobbyKey %~ addPlayer (req^.playerKey) pInfo
+            pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
+        LeaveLobby lobbyKey -> do
+            atomically $ do
+                modifyTVar svar $
+                    lobbies . at lobbyKey %~ (\case
+                        Nothing -> Nothing
+                        Just lob ->
+                            if lob^.ownerKey == req^.playerKey
+                            then Nothing
+                            else Just $ lob & waitingPlayers %~ filter ((/= req^.playerKey) . fst)
+                        )
             pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
         ListLobbies -> do
             servState <- readTVarIO svar
@@ -96,6 +113,19 @@ work svar req = do
                                 pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
                     else
                         pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
+
+addPlayer :: String -> PlayerInfo -> Lobby a -> Lobby a
+addPlayer key pinfo lobby =
+    lobby &
+        waitingPlayers %~ \players ->
+            if any ((== key) . fst) players
+            then
+                map (\(k, v) ->
+                    if k == key
+                    then (k, pinfo)
+                    else (k, v)
+                    ) players
+            else players ++ [(key, pinfo)]
 
 mainPage :: Html ()
 mainPage = do
