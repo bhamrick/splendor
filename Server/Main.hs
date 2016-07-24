@@ -32,13 +32,13 @@ work svar req = do
         GameAction gameKey act -> atomically $ do
             servState <- readTVar svar
             case Map.lookup gameKey (servState^.instances) of
-                Nothing -> pure $ responseLBS status400 [("Content-Type", "text/plain")] ""
+                Nothing -> pure $ responseLBS status400 [("Content-Type", "application/json")] "[]"
                 Just inst -> do
                     case Map.lookup (req^.playerKey) (inst^.playerKeys) of
-                        Nothing -> pure $ responseLBS status400 [("Content-Type", "text/plain")] ""
+                        Nothing -> pure $ responseLBS status400 [("Content-Type", "application/json")] "[]"
                         Just idx -> do
                             case runAction idx act (inst^.runningGame.gameState) of
-                                Nothing -> pure $ responseLBS status400 [("Content-Type", "text/plain")] ""
+                                Nothing -> pure $ responseLBS status400 [("Content-Type", "application/json")] "[]"
                                 Just (res, gs') -> do
                                     writeTVar svar (servState & instances . ix gameKey . runningGame . gameState .~ gs')
                                     pure $ responseLBS status200 [("Content-Type", "application/json")] (encode (res, gs'))
@@ -50,13 +50,12 @@ work svar req = do
                         { _waitingPlayers = [(req^.playerKey, pInfo)]
                         , _ownerKey = req^.playerKey
                         })
-            pure $ responseLBS status200 [("Content-Type", "text/plain")] (encode newLobbyId)
+            pure $ responseLBS status200 [("Content-Type", "application/json")] (encode newLobbyId)
         JoinLobby lobbyKey pInfo -> do
-            newLobbyId <- newIdentifier
             atomically $ do
                 modifyTVar svar $
-                    lobbies . ix newLobbyId . waitingPlayers %~ (:) (req^.playerKey, pInfo)
-            pure $ responseLBS status200 [("Content-Type", "text/plain")] ""
+                    lobbies . ix lobbyKey . waitingPlayers %~ (:) (req^.playerKey, pInfo)
+            pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
         ListLobbies -> do
             servState <- readTVarIO svar
             pure $ responseLBS status200 [("Content-Type", "application/json")] (encode (fmap (map snd . view waitingPlayers) (servState^.lobbies)))
@@ -64,24 +63,24 @@ work svar req = do
             servState <- readTVarIO svar
             let maybeInst = servState^?instances.ix gameKey
             case maybeInst of
-                Nothing -> pure $ responseLBS status404 [("Content-Type", "text/plain")] ""
+                Nothing -> pure $ responseLBS status404 [("Content-Type", "application/json")] "[]"
                 Just inst -> do
                     case inst^.playerKeys.at (req^.playerKey) of
-                        Nothing -> pure $ responseLBS status400 [("Content-Type", "text/plain")] ""
+                        Nothing -> pure $ responseLBS status400 [("Content-Type", "application/json")] "[]"
                         Just pos -> pure $ responseLBS status200 [("Content-Type", "application/json")] (encode (fmap (viewGame pos) (inst^.runningGame)))
         StartGame lobbyKey -> do
             lobbyData <- do
                 servState <- readTVarIO svar
                 pure (servState ^. lobbies . at lobbyKey)
             case lobbyData of
-                Nothing -> pure $ responseLBS status200 [("Content-Type", "text/plain")] ""
+                Nothing -> pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
                 Just ldat -> do
                     if req^.playerKey == ldat^.ownerKey
                     then do
                         playerOrder <- shuffleM (ldat ^. waitingPlayers)
                         gameStart <- initState (length playerOrder)
                         case gameStart of
-                            Nothing -> pure $ responseLBS status200 [("Content-Type", "text/plain")] ""
+                            Nothing -> pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
                             Just gs -> atomically $ do
                                 let inst = Instance
                                         { _playerKeys = Map.fromList (zip (map fst playerOrder) [0..])
@@ -94,9 +93,9 @@ work svar req = do
                                 modifyTVar svar $ \servState -> servState
                                     & lobbies . at lobbyKey .~ Nothing
                                     & instances . at lobbyKey .~ Just inst
-                                pure $ responseLBS status200 [("Content-Type", "text/plain")] ""
+                                pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
                     else
-                        pure $ responseLBS status200 [("Content-Type", "text/plain")] ""
+                        pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
 
 mainPage :: Html ()
 mainPage = do
@@ -125,7 +124,7 @@ serveFile :: FilePath -> Request -> IO Response
 serveFile path req = do
     r <- tryJust (guard . isDoesNotExistError) $ Data.ByteString.Lazy.readFile path
     return $ case r of
-        Left error      -> responseLBS status404 [("Content-Type", "text/plain")] ""
+        Left error      -> responseLBS status404 [("Content-Type", "application/json")] "[]"
         Right content   -> responseLBS status200 [("Content-Type", contentType . takeExtension $ path)] content
 
 serverApplication :: IO (Request -> IO Response)
@@ -140,11 +139,11 @@ serverApplication = do
             case pathInfo request of
                 [] -> pure $ responseLBS status200 [("Content-Type", "text/html")] (renderBS mainPage)
                 ["client.js"] -> serveFile "client/client.js" request
-                _ -> pure $ responseLBS status404 [("Content-Type", "text/plain")] ""
+                _ -> pure $ responseLBS status404 [("Content-Type", "application/json")] "[]"
         else do
             bod <- lazyRequestBody request
             case decode bod of
-                Nothing -> pure $ responseLBS status400 [("Content-Type", "text/plain")] ""
+                Nothing -> pure $ responseLBS status400 [("Content-Type", "application/json")] "[]"
                 Just req -> work svar req
 
 main :: IO ()
