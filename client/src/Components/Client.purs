@@ -36,7 +36,7 @@ import Splendor.Types
 type ClientState =
     { clientKey :: String
     , playerInfo :: PlayerInfo
-    , lobbyList :: StrMap LobbyView
+    , instanceList :: StrMap InstanceSummary
     , currentLobbyKey :: Maybe String
     , currentRunningGame :: Maybe (RunningGame GameState)
     }
@@ -81,10 +81,23 @@ initializeState = do
     pure $
         { clientKey: key
         , playerInfo: pInfo
-        , lobbyList: StrMap.empty :: StrMap LobbyView
+        , instanceList: StrMap.empty :: StrMap InstanceSummary
         , currentLobbyKey: Nothing
         , currentRunningGame: Nothing
         }
+
+makeRequest :: forall a b e. (EncodeJson a, DecodeJson b) => ServerRequest a -> Aff ( ajax :: AJAX | e ) (Maybe b)
+makeRequest req = do
+    res <- post "/" (encodeJson req)
+    if res.status == StatusCode 200
+        then case decodeJson (res.response) of
+            Left _ -> pure Nothing
+            Right (ErrorResponse _) -> pure Nothing
+            Right (OkResponse dat) ->
+                case decodeJson dat of
+                    Left _ -> pure Nothing
+                    Right val -> pure (Just val)
+        else pure Nothing
 
 backgroundWork :: forall e. R.ReactThis _ ClientState -> Aff ( ajax :: AJAX, console :: CONSOLE | e ) Unit
 backgroundWork rthis = forever do
@@ -95,37 +108,20 @@ backgroundWork rthis = forever do
 refreshLobbies :: forall e. R.ReactThis _ ClientState -> Aff _ Unit
 refreshLobbies rthis = do
     s <- liftEff $ R.readState rthis
-    dat <- do
-        res <- post "/" (encodeJson (ServerRequest
-            { playerKey: s.clientKey
-            , requestData: ListLobbies
-            }))
-        if res.status == StatusCode 200
-            then pure $ either (const Nothing) Just (decodeJson (res.response))
-            else pure Nothing
+    dat <- makeRequest (ServerRequest
+        { playerKey: s.clientKey
+        , requestData: ListLobbies
+        })
+    liftEff $ log (show dat)
     case dat of
         Nothing -> pure unit
-        Just lobbies -> do
-            liftEff $ R.transformState rthis (\state -> state { lobbyList = lobbies })
+        Just instances -> do
+            liftEff $ R.transformState rthis (\state -> state { instanceList = instances })
 
+-- TODO: Update with new unified format
 refreshGame :: forall e. R.ReactThis _ ClientState -> Aff _ Unit
 refreshGame rthis = do
-    s <- liftEff $ R.readState rthis
-    case s.currentLobbyKey of
-        Nothing -> pure unit
-        Just lobbyKey -> do
-            dat <- do
-                res <- post "/" (encodeJson (ServerRequest
-                    { playerKey: s.clientKey
-                    , requestData: GetGameState lobbyKey
-                    }))
-                if res.status == StatusCode 200
-                    then pure $ either (const Nothing) Just (decodeJson res.response)
-                    else pure Nothing
-            case dat of
-                Nothing -> pure unit
-                Just runningGame ->
-                    liftEff $ R.transformState rthis (\state -> state { currentRunningGame = Just runningGame })
+    pure unit
 
 -- Lifted specs for subcomponents
 pInfoSpec = T.focusState _playerInfo PlayerInfo.spec
@@ -153,7 +149,7 @@ render dispatch p state _ =
                                     [ R.text "Join"
                                     ]
                                 ]
-                            ]) (StrMap.toList state.lobbyList)
+                            ]) (StrMap.toList state.instanceList)
                         , R.button
                             [ RP.onClick \_ -> dispatch NewLobbyAction
                             ]
@@ -179,40 +175,30 @@ performAction a p s =
         OnPlayerInfo a' -> do
             (view T._performAction pInfoSpec) a' p s
         NewLobbyAction -> do
-            newLobbyKey <- lift $ do
-                res <- post "/" (encodeJson (ServerRequest
-                    { playerKey: s.clientKey
-                    , requestData: NewLobby s.playerInfo
-                    }))
-                if res.status == StatusCode 200
-                    then pure $ either (const Nothing) Just (decodeJson (res.response))
-                    else pure Nothing
+            newLobbyKey <- lift $ makeRequest (ServerRequest
+                { playerKey: s.clientKey
+                , requestData: NewLobby s.playerInfo
+                })
             void $ T.cotransform (\state -> state { currentLobbyKey = newLobbyKey })
         JoinLobbyAction lobbyKey -> do
-            success <- lift $ do
-                (res :: AffjaxResponse String) <- post "/" (encodeJson (ServerRequest
-                    { playerKey: s.clientKey
-                    , requestData: JoinLobby lobbyKey s.playerInfo
-                    }))
-                pure $ res.status == StatusCode 200
-            if success
-                then do
-                    void $ T.cotransform (\state -> state { currentLobbyKey = Just lobbyKey })
-                else pure unit
+            (dat :: Maybe Json) <- lift $ makeRequest (ServerRequest
+                { playerKey: s.clientKey
+                , requestData: JoinLobby lobbyKey s.playerInfo
+                })
+            case dat of
+                Nothing -> pure unit
+                Just _ -> void $ T.cotransform (\state -> state { currentLobbyKey = Just lobbyKey })
         LeaveLobbyAction -> do
             case s.currentLobbyKey of
                 Nothing -> pure unit
                 Just lobbyKey -> do
-                    success <- lift $ do
-                        (res :: AffjaxResponse String) <- post "/" (encodeJson (ServerRequest
-                            { playerKey: s.clientKey
-                            , requestData: LeaveLobby lobbyKey
-                            }))
-                        pure $ res.status == StatusCode 200
-                    if success
-                        then do
-                            void $ T.cotransform (\state -> state { currentLobbyKey = Nothing })
-                        else pure unit
+                    (dat :: Maybe Json) <- lift $ makeRequest (ServerRequest
+                        { playerKey: s.clientKey
+                        , requestData: LeaveLobby lobbyKey
+                        })
+                    case dat of
+                        Nothing -> pure unit
+                        Just _ -> void $ T.cotransform (\state -> state { currentLobbyKey = Nothing })
 
 spec :: T.Spec _ ClientState _ ClientAction
 spec = T.simpleSpec performAction render

@@ -48,28 +48,56 @@ instance FromJSON (Map Int PlayerInfo) where
 instance ToJSON a => ToJSON (RunningGame a)
 instance FromJSON a => FromJSON (RunningGame a)
 
-data Instance a =
-    Instance
-        { _playerKeys :: Map String Int
-        , _runningGame :: RunningGame a
-        }
-    deriving (Eq, Show, Ord)
-
-data Lobby a =
-    Lobby
+data Instance
+    = WaitingInstance
         { _waitingPlayers :: [(String, PlayerInfo)]
         , _ownerKey :: String
         }
-    deriving (Eq, Show, Ord)
-
-data LobbyView =
-    LobbyView
-        { _lvWaitingPlayers :: [PlayerInfo]
+    | RunningInstance
+        { _playerKeys :: Map String Int
+        , _runningGame :: RunningGame GameState
+        }
+    | CompletedInstance
+        { _playerKeys :: Map String Int
+        , _completedGame :: RunningGame GameState
+        , _result :: GameResult
         }
     deriving (Eq, Show, Ord, Generic)
 
-instance ToJSON LobbyView
-instance FromJSON LobbyView
+data InstanceView
+    = WaitingInstanceView
+        { _ivWaitingPlayers :: [PlayerInfo]
+        }
+    | RunningInstanceView
+        { _ivRunningGame :: RunningGame GameView
+        }
+    | CompletedInstanceView
+        { _ivCompletedGame :: RunningGame GameState
+        , _ivResult :: GameResult
+        }
+    deriving (Eq, Show, Ord, Generic)
+
+instance ToJSON InstanceView
+instance FromJSON InstanceView
+
+data InstanceState
+    = Waiting
+    | Running
+    | Completed
+    deriving (Eq, Show, Ord, Generic)
+
+instance ToJSON InstanceState
+instance FromJSON InstanceState
+
+data InstanceSummary
+    = InstanceSummary
+        { _isPlayers :: [PlayerInfo]
+        , _isState :: InstanceState
+        }
+    deriving (Eq, Show, Ord, Generic)
+
+instance ToJSON InstanceSummary
+instance FromJSON InstanceSummary
 
 data ServerRequest a =
     ServerRequest
@@ -94,16 +122,23 @@ data RequestData
 instance ToJSON RequestData
 instance FromJSON RequestData
 
-data ServerState a =
+data ServerResponse
+    = ErrorResponse String
+    | OkResponse Value
+    deriving (Eq, Show, Generic)
+
+instance ToJSON ServerResponse
+instance FromJSON ServerResponse
+
+data ServerState =
     ServerState
-        { _instances :: Map String (Instance a)
-        , _lobbies :: Map String (Lobby a)
+        { _instances :: Map String Instance
         }
     deriving (Eq, Show, Ord)
 
 makeLenses ''PlayerInfo
 makeLenses ''RunningGame
 makeLenses ''Instance
-makeLenses ''Lobby
+makeLenses ''InstanceView
 makeLenses ''ServerState
 makeLenses ''ServerRequest

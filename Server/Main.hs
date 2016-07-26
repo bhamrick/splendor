@@ -10,6 +10,7 @@ import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy
+import Data.Foldable
 import qualified Data.Map as Map
 import Data.String
 import System.FilePath
@@ -27,79 +28,86 @@ import Splendor.Rules
 import Server.Identifier
 import Server.Types
 
-work :: TVar (ServerState GameState) -> ServerRequest RequestData -> IO Response
+work :: TVar ServerState -> ServerRequest RequestData -> IO ServerResponse
 work svar req = do
     case req^.requestData of
         GameAction gameKey act -> atomically $ do
             servState <- readTVar svar
             case Map.lookup gameKey (servState^.instances) of
-                Nothing -> pure $ responseLBS status400 [("Content-Type", "application/json")] "[]"
+                Nothing -> pure $ ErrorResponse "No such game"
                 Just inst -> do
                     case Map.lookup (req^.playerKey) (inst^.playerKeys) of
-                        Nothing -> pure $ responseLBS status400 [("Content-Type", "application/json")] "[]"
+                        Nothing -> pure $ ErrorResponse "Requesting player is not in the game"
                         Just idx -> do
-                            case runAction idx act (inst^.runningGame.gameState) of
-                                Nothing -> pure $ responseLBS status400 [("Content-Type", "application/json")] "[]"
+                            case (inst^?runningGame.gameState) >>= runAction idx act of
+                                Nothing -> pure $ ErrorResponse "Invalid game action"
                                 Just (res, gs') -> do
                                     writeTVar svar (servState & instances . ix gameKey . runningGame . gameState .~ gs')
-                                    pure $ responseLBS status200 [("Content-Type", "application/json")] (encode (res, gs'))
+                                    pure $ OkResponse (toJSON (res, gs'))
         NewLobby pInfo -> do
             servState <- atomically $ readTVar svar
-            if any (\lob -> lob^.ownerKey == req^.playerKey) (servState^.lobbies)
+            if any (\lob -> lob^.ownerKey == req^.playerKey) (servState^.instances)
             then
-                pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
+                pure $ ErrorResponse "Player already owns an unstarted game"
             else do
-                newLobbyId <- newIdentifier
+                newInstanceId <- newIdentifier
                 atomically $ do
                     modifyTVar svar $
-                        lobbies . at newLobbyId .~ Just (Lobby
+                        instances . at newInstanceId .~ Just (WaitingInstance
                             { _waitingPlayers = [(req^.playerKey, pInfo)]
                             , _ownerKey = req^.playerKey
                             })
-                pure $ responseLBS status200 [("Content-Type", "application/json")] (encode newLobbyId)
+                pure $ OkResponse (toJSON newInstanceId)
         JoinLobby lobbyKey pInfo -> do
             atomically $ do
-                modifyTVar svar $
-                    lobbies . ix lobbyKey %~ addPlayer (req^.playerKey) pInfo
-            pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
+                servState <- readTVar svar
+                case servState^.instances.at lobbyKey of
+                    Nothing -> pure $ ErrorResponse "No such game"
+                    Just (inst@WaitingInstance {}) -> do
+                        modifyTVar svar $
+                            instances . ix lobbyKey . waitingPlayers %~ addPlayer (req^.playerKey) pInfo
+                        pure $ OkResponse (toJSON ())
+                    Just _ -> pure $ ErrorResponse "Game already started"
         LeaveLobby lobbyKey -> do
             atomically $ do
                 modifyTVar svar $
-                    lobbies . at lobbyKey %~ (\case
-                        Nothing -> Nothing
-                        Just lob ->
-                            if lob^.ownerKey == req^.playerKey
+                    instances . at lobbyKey %~ (\case
+                        Just (inst@(WaitingInstance
+                              { _waitingPlayers = players
+                              , _ownerKey = owner
+                              })) ->
+                            if owner == req^.playerKey
                             then Nothing
-                            else Just $ lob & waitingPlayers %~ filter ((/= req^.playerKey) . fst)
+                            else Just $ inst & waitingPlayers %~ filter ((/= req^.playerKey) . fst)
+                        inst -> inst
                         )
-            pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
+            pure $ OkResponse (toJSON ())
         ListLobbies -> do
             servState <- readTVarIO svar
-            pure $ responseLBS status200 [("Content-Type", "application/json")] (encode (fmap (map snd . view waitingPlayers) (servState^.lobbies)))
+            pure . OkResponse . toJSON . fmap summarizeInstance $ (servState^.instances)
         GetGameState gameKey -> do
             servState <- readTVarIO svar
             let maybeInst = servState^?instances.ix gameKey
             case maybeInst of
-                Nothing -> pure $ responseLBS status404 [("Content-Type", "application/json")] "[]"
+                Nothing -> pure $ ErrorResponse "No such instance"
                 Just inst -> do
-                    case inst^.playerKeys.at (req^.playerKey) of
-                        Nothing -> pure $ responseLBS status400 [("Content-Type", "application/json")] "[]"
-                        Just pos -> pure $ responseLBS status200 [("Content-Type", "application/json")] (encode (fmap (viewGame pos) (inst^.runningGame)))
-        StartGame lobbyKey -> do
+                    case inst^?playerKeys.ix (req^.playerKey) of
+                        Nothing -> pure $ ErrorResponse "Player is not in game"
+                        Just pos -> pure $ OkResponse (toJSON (fmap (fmap (viewGame pos)) (inst^?runningGame)))
+        StartGame instanceKey -> do
             lobbyData <- do
                 servState <- readTVarIO svar
-                pure (servState ^. lobbies . at lobbyKey)
+                pure (servState ^. instances . at instanceKey)
             case lobbyData of
-                Nothing -> pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
-                Just ldat -> do
-                    if req^.playerKey == ldat^.ownerKey
+                Just (WaitingInstance { _waitingPlayers = players, _ownerKey = owner }) -> do
+                    if req^.playerKey == owner
                     then do
-                        playerOrder <- shuffleM (ldat ^. waitingPlayers)
+                        playerOrder <- shuffleM players
                         gameStart <- initState (length playerOrder)
                         case gameStart of
-                            Nothing -> pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
+                            Nothing -> pure $ ErrorResponse "Error attempting to start game"
                             Just gs -> atomically $ do
-                                let inst = Instance
+                                let inst = RunningInstance
                                         { _playerKeys = Map.fromList (zip (map fst playerOrder) [0..])
                                         , _runningGame = RunningGame
                                             { _players = Map.fromList (zip [0..] (map snd playerOrder))
@@ -108,24 +116,44 @@ work svar req = do
                                             }
                                         }
                                 modifyTVar svar $ \servState -> servState
-                                    & lobbies . at lobbyKey .~ Nothing
-                                    & instances . at lobbyKey .~ Just inst
-                                pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
+                                    & instances . at instanceKey .~ Just inst
+                                pure $ OkResponse (toJSON ())
                     else
-                        pure $ responseLBS status200 [("Content-Type", "application/json")] "[]"
+                        pure $ ErrorResponse "Non-owner cannot start game"
+                Just inst ->
+                    pure $ ErrorResponse "Game already started"
+                Nothing ->
+                    pure $ ErrorResponse "No such game"
 
-addPlayer :: String -> PlayerInfo -> Lobby a -> Lobby a
-addPlayer key pinfo lobby =
-    lobby &
-        waitingPlayers %~ \players ->
-            if any ((== key) . fst) players
-            then
-                map (\(k, v) ->
-                    if k == key
-                    then (k, pinfo)
-                    else (k, v)
-                    ) players
-            else players ++ [(key, pinfo)]
+addPlayer :: String -> PlayerInfo -> [(String, PlayerInfo)] -> [(String, PlayerInfo)]
+addPlayer key pinfo players =
+    if any ((== key) . fst) players
+    then
+        map (\(k, v) ->
+            if k == key
+            then (k, pinfo)
+            else (k, v)
+            ) players
+    else players ++ [(key, pinfo)]
+
+summarizeInstance :: Instance -> InstanceSummary
+summarizeInstance inst =
+    case inst of
+        WaitingInstance { _waitingPlayers = players } ->
+            InstanceSummary
+                { _isPlayers = map snd players
+                , _isState = Waiting
+                }
+        RunningInstance { _runningGame = rg } ->
+            InstanceSummary
+                { _isPlayers = toList (rg^.players)
+                , _isState = Running
+                }
+        CompletedInstance { _completedGame = rg } ->
+            InstanceSummary
+                { _isPlayers = toList (rg^.players)
+                , _isState = Completed
+                }
 
 mainPage :: Html ()
 mainPage = do
@@ -161,7 +189,6 @@ serverApplication :: IO (Request -> IO Response)
 serverApplication = do
     svar <- newTVarIO $ ServerState
         { _instances = Map.empty
-        , _lobbies = Map.empty
         }
     pure $ \request -> do
         if requestMethod request == methodGet
@@ -174,7 +201,9 @@ serverApplication = do
             bod <- lazyRequestBody request
             case decode bod of
                 Nothing -> pure $ responseLBS status400 [("Content-Type", "application/json")] "[]"
-                Just req -> work svar req
+                Just req -> do
+                    resp <- work svar req
+                    pure $ responseLBS status200 [("Content-Type", "application/json")] (encode resp)
 
 main :: IO ()
 main = do

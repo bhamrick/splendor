@@ -675,24 +675,57 @@ instance encodeJsonRunningGame :: EncodeJson a => EncodeJson (RunningGame a) whe
         ~> "_version" := rg.version
         ~> "_gameState" := rg.gameState
 
-newtype LobbyView = LobbyView
-    { waitingPlayers :: Array PlayerInfo
-    }
+data InstanceState
+    = Waiting
+    | Running
+    | Completed
 
-derive instance genericLobbyView :: Generic LobbyView
+derive instance genericInstanceState :: Generic InstanceState
 
-instance showLobbyView :: Show LobbyView where
+instance showInstanceState :: Show InstanceState where
     show = gShow
 
-instance decodeJsonLobbyView :: DecodeJson LobbyView where
+instance decodeInstanceState :: DecodeJson InstanceState where
     decodeJson json = do
-        waitingPlayers <- decodeJson json
-        pure $ LobbyView
-            { waitingPlayers: waitingPlayers
+        str <- decodeJson json
+        case str of
+            "Waiting" -> pure Waiting
+            "Running" -> pure Running
+            "Completed" -> pure Completed
+            _ -> Left "Invalid instance state"
+
+instance encodeInstanceState :: EncodeJson InstanceState where
+    encodeJson s =
+        case s of
+            Waiting -> encodeJson "Waiting"
+            Running -> encodeJson "Running"
+            Completed -> encodeJson "Completed"
+
+newtype InstanceSummary = InstanceSummary
+    { players :: Array PlayerInfo
+    , state :: InstanceState
+    }
+
+derive instance genericInstanceSummary :: Generic InstanceSummary
+
+instance showInstanceSummary :: Show InstanceSummary where
+    show = gShow
+
+instance decodeInstanceSummary :: DecodeJson InstanceSummary where
+    decodeJson json = do
+        obj <- decodeJson json
+        players <- obj .? "_isPlayers"
+        state <- obj .? "_isState"
+        pure $ InstanceSummary
+            { players: players
+            , state: state
             }
 
-instance encodeJsonLobbyView :: EncodeJson LobbyView where
-    encodeJson (LobbyView lv) = encodeJson lv.waitingPlayers
+instance encodeInstanceSummary :: EncodeJson InstanceSummary where
+    encodeJson (InstanceSummary is) =
+        "_isPlayers" := is.players
+        ~> "_isState" := is.state
+        ~> jsonEmptyObject
 
 newtype ServerRequest a = ServerRequest
     { playerKey :: String
@@ -780,4 +813,33 @@ instance encodeJsonRequestData :: EncodeJson RequestData where
             GameAction gameKey action ->
                 "tag" := "GameAction"
                 ~> "contents" := Tuple gameKey action
+                ~> jsonEmptyObject
+
+data ServerResponse
+    = ErrorResponse String
+    | OkResponse Json
+
+instance decodeJsonServerResponse :: DecodeJson ServerResponse where
+    decodeJson json = do
+        obj <- decodeJson json
+        tag <- obj .? "tag"
+        case tag of
+            "ErrorResponse" -> do
+                message <- obj .? "contents"
+                pure $ ErrorResponse message
+            "OkResponse" -> do
+                contents <- obj .? "contents"
+                pure $ OkResponse contents
+            _ -> Left "Invalid ServerResponse tag"
+
+instance encodeJsonServerResponse :: EncodeJson ServerResponse where
+    encodeJson resp =
+        case resp of
+            ErrorResponse message ->
+                "tag" := "ErrorResponse"
+                ~> "contents" := message
+                ~> jsonEmptyObject
+            OkResponse contents ->
+                "tag" := "OkResponse"
+                ~> "contents" := contents
                 ~> jsonEmptyObject
