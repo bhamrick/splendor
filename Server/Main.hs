@@ -91,9 +91,7 @@ work svar req = do
             case maybeInst of
                 Nothing -> pure $ ErrorResponse "No such instance"
                 Just inst -> do
-                    case inst^?playerKeys.ix (req^.playerKey) of
-                        Nothing -> pure $ ErrorResponse "Player is not in game"
-                        Just pos -> pure $ OkResponse (toJSON (fmap (fmap (viewGame pos)) (inst^?runningGame)))
+                    pure $ OkResponse (toJSON (viewInstance (req^.playerKey) inst))
         StartGame instanceKey -> do
             lobbyData <- do
                 servState <- readTVarIO svar
@@ -153,6 +151,32 @@ summarizeInstance inst =
             InstanceSummary
                 { _isPlayers = toList (rg^.players)
                 , _isState = Completed
+                }
+
+viewInstance :: String -> Instance -> Maybe InstanceView
+viewInstance playerKey inst =
+    case inst of
+        WaitingInstance { _waitingPlayers = players } ->
+            Just $ WaitingInstanceView
+                { _ivWaitingPlayers = map snd players
+                }
+        RunningInstance
+                { _playerKeys = keyMap
+                , _runningGame = rg
+                } ->
+            case keyMap ^. at playerKey of
+                Nothing -> Nothing
+                Just idx ->
+                    Just $ RunningInstanceView
+                        { _ivRunningGame = viewGame idx <$> rg
+                        }
+        CompletedInstance
+                { _completedGame = cg
+                , _result = res
+                } ->
+            Just $ CompletedInstanceView
+                { _ivCompletedGame = cg
+                , _ivResult = res
                 }
 
 mainPage :: Html ()

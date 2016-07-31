@@ -38,7 +38,7 @@ type ClientState =
     , playerInfo :: PlayerInfo
     , instanceList :: StrMap InstanceSummary
     , currentLobbyKey :: Maybe String
-    , currentRunningGame :: Maybe (RunningGame GameState)
+    , currentInstance :: Maybe InstanceView
     }
 
 _playerInfo :: forall a b r. Lens { playerInfo :: a | r } { playerInfo :: b | r } a b
@@ -83,7 +83,7 @@ initializeState = do
         , playerInfo: pInfo
         , instanceList: StrMap.empty :: StrMap InstanceSummary
         , currentLobbyKey: Nothing
-        , currentRunningGame: Nothing
+        , currentInstance: Nothing
         }
 
 makeRequest :: forall a b e. (EncodeJson a, DecodeJson b) => ServerRequest a -> Aff ( ajax :: AJAX | e ) (Maybe b)
@@ -118,17 +118,31 @@ refreshLobbies rthis = do
         Just instances -> do
             liftEff $ R.transformState rthis (\state -> state { instanceList = instances })
 
--- TODO: Update with new unified format
 refreshGame :: forall e. R.ReactThis _ ClientState -> Aff _ Unit
 refreshGame rthis = do
-    pure unit
+    s <- liftEff $ R.readState rthis
+    case s.currentLobbyKey of
+        Nothing -> pure unit
+        Just lobbyKey ->
+            case s.currentInstance of
+                Just (CompletedInstanceView _) -> pure unit
+                _ -> do
+                    instState <- makeRequest (ServerRequest
+                        { playerKey: s.clientKey
+                        , requestData: GetGameState lobbyKey
+                        })
+                    case instState of
+                        Just _ ->
+                            liftEff $ R.transformState rthis (\state -> state { currentInstance = instState })
+                        Nothing ->
+                            liftEff $ R.transformState rthis (\state -> state { currentLobbyKey = Nothing, currentInstance = Nothing })
 
 -- Lifted specs for subcomponents
 pInfoSpec = T.focusState _playerInfo PlayerInfo.spec
 
 render :: T.Render ClientState _ _
 render dispatch p state _ =
-    case state.currentRunningGame of
+    case state.currentInstance of
         Nothing ->
             case state.currentLobbyKey of
                 Nothing ->
@@ -158,7 +172,7 @@ render dispatch p state _ =
                         ]
                     ]
                 Just lobbyKey ->
-                    [ R.text "In lobby placeholder: "
+                    [ R.text "Attempting to join lobby: "
                     , R.text lobbyKey
                     , R.button
                         [ RP.onClick \_ -> dispatch LeaveLobbyAction
@@ -166,8 +180,28 @@ render dispatch p state _ =
                         [ R.text "Leave Game"
                         ]
                     ]
-        Just game ->
-            [ R.text "Ingame placeholder" ]
+        Just inst ->
+            case inst of
+                WaitingInstanceView wiv ->
+                    [ R.div' $
+                        [ R.text "Waiting in lobby"
+                        , R.button
+                            [ RP.onClick \_ -> dispatch LeaveLobbyAction
+                            ]
+                            [ R.text "Leave Game"
+                            ]
+                        ]
+                    , R.div' $
+                        [ R.text "Players:" ]
+                        <> foldMap (\(PlayerInfo p) ->
+                            [ R.text " "
+                            , R.text p.displayName
+                            ]) wiv.waitingPlayers
+                    ]
+                RunningInstanceView riv ->
+                    [ R.text "Running game placeholder" ]
+                CompletedInstanceView civ ->
+                    [ R.text "Completed game placeholder" ]
 
 performAction :: T.PerformAction _ ClientState _ ClientAction
 performAction a p s =
@@ -198,7 +232,7 @@ performAction a p s =
                         })
                     case dat of
                         Nothing -> pure unit
-                        Just _ -> void $ T.cotransform (\state -> state { currentLobbyKey = Nothing })
+                        Just _ -> void $ T.cotransform (\state -> state { currentLobbyKey = Nothing, currentInstance = Nothing })
 
 spec :: T.Spec _ ClientState _ ClientAction
 spec = T.simpleSpec performAction render

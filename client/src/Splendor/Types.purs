@@ -727,6 +727,59 @@ instance encodeInstanceSummary :: EncodeJson InstanceSummary where
         ~> "_isState" := is.state
         ~> jsonEmptyObject
 
+data InstanceView
+    = WaitingInstanceView
+        { waitingPlayers :: Array PlayerInfo
+        }
+    | RunningInstanceView
+        { runningGame :: RunningGame GameView
+        }
+    | CompletedInstanceView
+        { completedGame :: RunningGame GameState
+        , result :: GameResult
+        }
+
+instance decodeInstanceView :: DecodeJson InstanceView where
+    decodeJson json = do
+        obj <- decodeJson json
+        tag <- obj .? "tag"
+        case tag of
+            "WaitingInstanceView" -> do
+                waitingPlayers <- obj .? "_ivWaitingPlayers"
+                pure $ WaitingInstanceView
+                    { waitingPlayers: waitingPlayers
+                    }
+            "RunningInstanceView" -> do
+                runningGame <- obj .? "_ivRunningGame"
+                pure $ RunningInstanceView
+                    { runningGame: runningGame
+                    }
+            "CompletedInstanceView" -> do
+                completedGame <- obj .? "_ivCompletedGame"
+                result <- obj .? "_ivResult"
+                pure $ CompletedInstanceView
+                    { completedGame: completedGame
+                    , result: result
+                    }
+            _ -> Left "Invalid InstanceView tag"
+
+instance encodeInstanceView :: EncodeJson InstanceView where
+    encodeJson iv =
+        case iv of
+            WaitingInstanceView wiv ->
+                "tag" := "WaitingInstanceView"
+                ~> "_ivWaitingPlayers" := wiv.waitingPlayers
+                ~> jsonEmptyObject
+            RunningInstanceView riv ->
+                "tag" := "RunningInstanceView"
+                ~> "_ivRunningGame" := riv.runningGame
+                ~> jsonEmptyObject
+            CompletedInstanceView civ ->
+                "tag" := "CompletedInstanceView"
+                ~> "_ivCompletedGame" := civ.completedGame
+                ~> "_ivResult" := civ.result
+                ~> jsonEmptyObject
+
 newtype ServerRequest a = ServerRequest
     { playerKey :: String
     , requestData :: a
