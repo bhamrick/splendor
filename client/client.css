@@ -5,7 +5,6 @@
     margin: 0.5em;
     border: 2px solid black;
     box-sizing: border-box;
-    position: relative;
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     -khtml-user-select: none;
@@ -13,6 +12,8 @@
     -ms-user-select: none;
     user-select: none;
     cursor: default;
+    position: relative;
+    background: #fff;
 }
 
 .tierDeck {
@@ -120,4 +121,57 @@
 .gold {
     background: #FFE15C;
     color: black;
+}
+
+.availableChips {
+    display: inline-block;
+}
+
+.psGroup {
+    display: table-cell;
+    text-align: center;
+    width: 96px;
+    position: relative;
+}
+
+.ownedCards .card {
+    margin-bottom: -6em;
+}
+
+.psSpecial {
+    display: table-cell;
+    text-align: center;
+    width: 96px;
+    bottom: 0;
+}
+
+.ownedCards {
+    display: table-cell;
+    padding-bottom: 5.5em;
+    width: 100%;
+    text-align: center;
+}
+
+.ownedChips {
+    display: block;
+    width: 100%;
+    text-align: center;
+}
+
+.myBoard {
+    border: 1px solid black;
+    display: inline-block;
+    padding: 2px;
+    position: relative;
+}
+
+.oppBoard {
+    border: 1px solid black;
+    display: inline-block;
+    padding: 2px;
+    position: relative;
+}
+
+.tierView {
+    position: relative;
 }

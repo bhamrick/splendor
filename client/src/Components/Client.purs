@@ -21,6 +21,7 @@ import Data.Either
 import Data.Foldable
 import Data.Int as Int
 import Data.Lens
+import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe
@@ -67,6 +68,7 @@ data ClientAction
     | ClearSelection
     | SelectChip Color
     | SelectCard CardId
+    | DoGameAction Action
 
 newKey :: forall e. Eff (random :: RANDOM | e) String
 newKey = go 40
@@ -234,8 +236,14 @@ renderGameView selection dispatch p (RunningGame rg) _ =
     case rg.gameState of
         GameView gv ->
             [ R.div
-                [ RP.className "availableChips" ]
-                (renderAvailableChips selection dispatch p gv.availableChips [])
+                [ RP.className "boardSupply" ]
+                [ R.div
+                    [ RP.className "availableChips" ]
+                    (renderAvailableChips selection dispatch p gv.availableChips [])
+                , R.div
+                    [ RP.className "actionArea" ]
+                    (renderActionButtons selection dispatch p (GameView gv) [])
+                ]
             , R.div
                 [ RP.className "tierView" ]
                 (renderTierView selection dispatch p gv.tier3View [])
@@ -257,6 +265,48 @@ renderGameView selection dispatch p (RunningGame rg) _ =
                         []
                 ) gv.opponentViews)
             ]
+
+renderActionButtons :: Maybe ActionSelection -> T.Render GameView _ _
+renderActionButtons selection dispatch p (GameView gv) _ =
+    case selection of
+        Nothing -> []
+        Just (TakeChipsSelection colors) ->
+            (if Array.length colors == min 3 numAvailableChipTypes
+            then
+                [ R.button
+                    [ RP.onClick \_ -> dispatch (DoGameAction (Take3 (Array.index colors 0) (Array.index colors 1) (Array.index colors 2)))
+                    ]
+                    [ R.text "Take chips"
+                    ]
+                ]
+            else [])
+            <> (case Array.uncons colors of
+                Just { head: c, tail: rest } ->
+                    if Array.null rest && fromMaybe 0 (Map.lookup (Basic c) gv.availableChips) >= 4
+                    then
+                        [ R.button
+                            [ RP.onClick \_ -> dispatch (DoGameAction (Take2 c))
+                            ]
+                            [ R.text "Take two"
+                            ]
+                        ]
+                    else []
+                _ -> [])
+        Just (CardSelection cardId) ->
+            -- TODO: Check legality of reserve/buy 
+            [ R.button
+                [ RP.onClick \_ -> dispatch (DoGameAction (Buy cardId))
+                ]
+                [ R.text "Buy"
+                ]
+            , R.button
+                [ RP.onClick \_ -> dispatch (DoGameAction (Reserve cardId))
+                ]
+                [ R.text "Reserve"
+                ]
+            ]
+    where
+    numAvailableChipTypes = List.length <<< List.filter (\(Tuple _ n) -> n > 0) $ Map.toList gv.availableChips
 
 renderTierView :: Maybe ActionSelection -> T.Render TierView _ _
 renderTierView selection dispatch p (TierView tv) _ =
@@ -349,7 +399,7 @@ renderPlayerState selection dispatch p (PlayerState ps) _ =
                     [ RP.className "card"
                     ]
                     (renderCard dispatch p card [])
-                ) (Array.filter (\(Card c) -> c.color == color) ps.ownedCards)
+                ) (Array.reverse $ Array.filter (\(Card c) -> c.color == color) ps.ownedCards)
             )
         , R.div
             [ RP.className "ownedChips"
@@ -377,7 +427,7 @@ renderPlayerState selection dispatch p (PlayerState ps) _ =
                     [ RP.className "card"
                     ]
                     (renderCard dispatch p card [])
-                ) ps.reservedCards
+                ) (Array.reverse ps.reservedCards)
             )
         , R.div
             [ RP.className "ownedChips"
@@ -460,6 +510,18 @@ performAction a p s =
             if s.currentSelection == Just (CardSelection cardId)
                 then void $ T.cotransform (\state -> state { currentSelection = Nothing })
                 else void $ T.cotransform (\state -> state { currentSelection = Just $ CardSelection cardId })
+        DoGameAction action -> do
+            case s.currentLobbyKey of
+                Nothing -> pure unit
+                Just gameKey -> do
+                    (dat :: Maybe Json) <- lift $ makeRequest (ServerRequest
+                        { playerKey: s.clientKey
+                        , requestData: GameAction gameKey action
+                        })
+                    case dat of
+                        Nothing -> pure unit
+                        Just _ -> do
+                            void $ T.cotransform (\state -> state { currentSelection = Nothing })
 
 spec :: T.Spec _ ClientState _ ClientAction
 spec = T.simpleSpec performAction render

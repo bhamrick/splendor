@@ -43,7 +43,7 @@ work svar req = do
                                 Nothing -> pure $ ErrorResponse "Invalid game action"
                                 Just (res, gs') -> do
                                     writeTVar svar (servState & instances . ix gameKey . runningGame . gameState .~ gs')
-                                    pure $ OkResponse (toJSON (res, gs'))
+                                    pure $ OkResponse (toJSON ())
         NewLobby pInfo -> do
             servState <- atomically $ readTVar svar
             if any (\lob -> lob^.ownerKey == req^.playerKey) (servState^.instances)
