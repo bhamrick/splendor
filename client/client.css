@@ -3,9 +3,16 @@
     height: 6em;
     display: inline-block;
     margin: 0.5em;
-    border: 1px solid black;
+    border: 2px solid black;
     box-sizing: border-box;
     position: relative;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    cursor: default;
 }
 
 .tierDeck {
@@ -13,12 +20,19 @@
     height: 6em;
     display: inline-block;
     margin: 0.5em;
-    border: 1px solid black;
+    border: 2px solid black;
     padding: 0.2em;
     box-sizing: border-box;
     background: #383535;
     color: white;
     text-align: center;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    cursor: default;
 }
 
 .cardTop {
@@ -49,6 +63,35 @@
     display: inline-block;
 }
 
+.chipPlaceholder {
+    width: 54px;
+    height: 54px;
+    display: inline-block;
+    text-align: center;
+}
+
+.selected {
+    border: 2px solid #00D953 !important;
+}
+
+.chip {
+    width: 1em;
+    height: 1em;
+    padding: 0.3em;
+    border-radius: 50%;
+    border: 2px solid black;
+    text-align: center;
+    display: inline-block;
+    font-size: 24px;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    cursor: default;
+}
+
 .red {
     background: #B30018;
     color: white;
@@ -72,4 +115,9 @@
 .black {
     background: #140E0E;
     color: white;
+}
+
+.gold {
+    background: #FFE15C;
+    color: black;
 }
