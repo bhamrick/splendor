@@ -183,7 +183,8 @@ mainPage :: Html ()
 mainPage = do
     doctype_
     head_ $ do
-        title_ "Splendor Server"
+        title_ "Splendor"
+        link_ [rel_ "stylesheet", type_ "text/css", href_ "client.css"]
     body_ $ do
         div_ [id_ "client"] $ do
             script_ [src_ "client.js"] ("" :: ByteString)
@@ -220,6 +221,7 @@ serverApplication = do
             case pathInfo request of
                 [] -> pure $ responseLBS status200 [("Content-Type", "text/html")] (renderBS mainPage)
                 ["client.js"] -> serveFile "client/client.js" request
+                ["client.css"] -> serveFile "client/client.css" request
                 _ -> pure $ responseLBS status404 [("Content-Type", "application/json")] "[]"
         else do
             bod <- lazyRequestBody request

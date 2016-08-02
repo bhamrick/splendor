@@ -20,8 +20,10 @@ import Data.Either
 import Data.Foldable
 import Data.Int as Int
 import Data.Lens
+import Data.Map as Map
 import Data.Maybe
 import Data.Generic
+import Data.String as String
 import Data.StrMap (StrMap)
 import Data.StrMap as StrMap
 import Data.Tuple
@@ -49,6 +51,7 @@ data ClientAction
     | NewLobbyAction
     | JoinLobbyAction String
     | LeaveLobbyAction
+    | StartGameAction
 
 newKey :: forall e. Eff (random :: RANDOM | e) String
 newKey = go 40
@@ -112,7 +115,6 @@ refreshLobbies rthis = do
         { playerKey: s.clientKey
         , requestData: ListLobbies
         })
-    liftEff $ log (show dat)
     case dat of
         Nothing -> pure unit
         Just instances -> do
@@ -172,8 +174,7 @@ render dispatch p state _ =
                         ]
                     ]
                 Just lobbyKey ->
-                    [ R.text "Attempting to join lobby: "
-                    , R.text lobbyKey
+                    [ R.text "Loading..."
                     , R.button
                         [ RP.onClick \_ -> dispatch LeaveLobbyAction
                         ]
@@ -185,11 +186,6 @@ render dispatch p state _ =
                 WaitingInstanceView wiv ->
                     [ R.div' $
                         [ R.text "Waiting in lobby"
-                        , R.button
-                            [ RP.onClick \_ -> dispatch LeaveLobbyAction
-                            ]
-                            [ R.text "Leave Game"
-                            ]
                         ]
                     , R.div' $
                         [ R.text "Players:" ]
@@ -197,11 +193,85 @@ render dispatch p state _ =
                             [ R.text " "
                             , R.text p.displayName
                             ]) wiv.waitingPlayers
+                    , R.button
+                        [ RP.onClick \_ -> dispatch LeaveLobbyAction
+                        ]
+                        [ R.text "Leave Game"
+                        ]
+                    , R.button
+                        [ RP.onClick \_ -> dispatch StartGameAction
+                        ]
+                        [ R.text "Start Game"
+                        ]
                     ]
                 RunningInstanceView riv ->
-                    [ R.text "Running game placeholder" ]
+                    [ R.div
+                        [ RP.className "gameView"
+                        ]
+                        (renderGameView dispatch p (riv.runningGame) [])
+                    ]
                 CompletedInstanceView civ ->
                     [ R.text "Completed game placeholder" ]
+
+renderGameView :: T.Render (RunningGame GameView) _ _
+renderGameView dispatch p (RunningGame rg) _ =
+    case rg.gameState of
+        GameView gv ->
+            [ R.div
+                [ RP.className "tierView" ]
+                (renderTierView dispatch p gv.tier3View [])
+            , R.div
+                [ RP.className "tierView" ]
+                (renderTierView dispatch p gv.tier2View [])
+            , R.div
+                [ RP.className "tierView" ]
+                (renderTierView dispatch p gv.tier1View [])
+            ]
+
+renderTierView :: T.Render TierView _ _
+renderTierView dispatch p (TierView tv) _ =
+    map (\c ->
+        R.div
+            [ RP.className "card"
+            ]
+            (renderCard dispatch p c [])
+        ) tv.availableCards
+    <> [ R.div
+        [ RP.className "tierDeck"
+        ]
+        [ R.text (show tv.deckCount)
+        ]
+    ]
+
+renderCard :: T.Render Card _ _
+renderCard dispatch p (Card c) _ =
+    [ R.div
+        [ RP.className (String.joinWith " " ["cardTop", colorClass c.color])
+        ]
+        if c.points > 0
+            then [ R.text (show c.points) ]
+            else [ R.text "\x00a0" ]
+    , R.div
+        [ RP.className "cardPrice"
+        ]
+        (foldMap (\(Tuple c n) ->
+            [ R.div
+                [ RP.className (String.joinWith " " ["cardPriceComponent", colorClass c])
+                ]
+                [ R.text (show n)
+                ]
+            ]) (Map.toList c.cost)
+        )
+    ]
+
+colorClass :: Color -> String
+colorClass c =
+    case c of
+        Red -> "red"
+        Green -> "green"
+        Blue -> "blue"
+        White -> "white"
+        Black -> "black"
 
 performAction :: T.PerformAction _ ClientState _ ClientAction
 performAction a p s =
@@ -215,13 +285,11 @@ performAction a p s =
                 })
             void $ T.cotransform (\state -> state { currentLobbyKey = newLobbyKey })
         JoinLobbyAction lobbyKey -> do
-            (dat :: Maybe Json) <- lift $ makeRequest (ServerRequest
+            (_ :: Maybe Json) <- lift $ makeRequest (ServerRequest
                 { playerKey: s.clientKey
                 , requestData: JoinLobby lobbyKey s.playerInfo
                 })
-            case dat of
-                Nothing -> pure unit
-                Just _ -> void $ T.cotransform (\state -> state { currentLobbyKey = Just lobbyKey })
+            void $ T.cotransform (\state -> state { currentLobbyKey = Just lobbyKey })
         LeaveLobbyAction -> do
             case s.currentLobbyKey of
                 Nothing -> pure unit
@@ -233,6 +301,15 @@ performAction a p s =
                     case dat of
                         Nothing -> pure unit
                         Just _ -> void $ T.cotransform (\state -> state { currentLobbyKey = Nothing, currentInstance = Nothing })
+        StartGameAction -> do
+            case s.currentLobbyKey of
+                Nothing -> pure unit
+                Just lobbyKey -> do
+                    (_ :: Maybe Json) <- lift $ makeRequest (ServerRequest
+                        { playerKey: s.clientKey
+                        , requestData: StartGame lobbyKey
+                        })
+                    pure unit
 
 spec :: T.Spec _ ClientState _ ClientAction
 spec = T.simpleSpec performAction render

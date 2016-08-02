@@ -1,0 +1,75 @@
+.card {
+    width: 5em;
+    height: 6em;
+    display: inline-block;
+    margin: 0.5em;
+    border: 1px solid black;
+    box-sizing: border-box;
+    position: relative;
+}
+
+.tierDeck {
+    width: 5em;
+    height: 6em;
+    display: inline-block;
+    margin: 0.5em;
+    border: 1px solid black;
+    padding: 0.2em;
+    box-sizing: border-box;
+    background: #383535;
+    color: white;
+    text-align: center;
+}
+
+.cardTop {
+    width: 100%;
+    height: 1.5em;
+    text-align: center;
+    padding: 0.2em;
+    box-sizing: border-box;
+    border-bottom: 1px solid black;
+}
+
+.cardPrice {
+    position: absolute;
+    bottom: 0;
+    text-align: center;
+    width: 100%;
+    margin: auto;
+}
+
+.cardPriceComponent {
+    width: 1em;
+    height: 1em;
+    padding: 0.3em;
+    border-radius: 50%;
+    border: 1px solid black;
+    margin: 0.2em;
+    text-align: center;
+    display: inline-block;
+}
+
+.red {
+    background: #B30018;
+    color: white;
+}
+
+.green {
+    background: #0E7311;
+    color: white;
+}
+
+.blue {
+    background: #0027A6;
+    color: white;
+}
+
+.white {
+    background: #E6F5F7;
+    color: black;
+}
+
+.black {
+    background: #140E0E;
+    color: white;
+}
