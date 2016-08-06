@@ -1,3 +1,21 @@
+.board {
+    display: inline-block;
+}
+
+.players {
+    display: inline-block;
+}
+
+.playerRow {
+    display: table-row;
+}
+
+.playerName {
+    display: table-cell;
+    padding: 0.3em;
+    vertical-align: middle;
+}
+
 .card {
     width: 5em;
     height: 6em;
@@ -14,6 +32,18 @@
     cursor: default;
     position: relative;
     background: #fff;
+}
+
+.facedownCard {
+    width: 5em;
+    height: 6em;
+    display: inline-block;
+    background: #383535;
+    cursor: default;
+    border: 2px solid black;
+    padding: 0.2em;
+    margin: 0.5em;
+    box-sizing: border-box;
 }
 
 .tierDeck {
@@ -79,6 +109,8 @@
     width: 1em;
     height: 1em;
     padding: 0.3em;
+    margin-left: 3px;
+    margin-right: 3px;
     border-radius: 50%;
     border: 2px solid black;
     text-align: center;
@@ -127,51 +159,56 @@
     display: inline-block;
 }
 
-.psGroup {
-    display: table-cell;
-    text-align: center;
-    width: 96px;
-    position: relative;
-}
-
 .ownedCards .card {
     margin-bottom: -6em;
 }
 
-.psSpecial {
-    display: table-cell;
-    text-align: center;
-    width: 96px;
-    bottom: 0;
+.cardRow {
+    display: table-row;
 }
 
 .ownedCards {
     display: table-cell;
+    padding: 3px;
     padding-bottom: 5.5em;
-    width: 100%;
     text-align: center;
+}
+
+.reservedCards {
+    display: table-cell;
+    border-left: 1px solid black;
+    min-width: 96px;
+}
+
+.chipRow {
+    display: table-row;
 }
 
 .ownedChips {
-    display: block;
-    width: 100%;
+    display: table-cell;
     text-align: center;
+    padding-bottom: 3px;
+    padding-top: 3px;
 }
 
 .myBoard {
+    padding: 0;
     border: 1px solid black;
-    display: inline-block;
-    padding: 2px;
+    display: table-cell;
     position: relative;
 }
 
 .oppBoard {
+    padding: 0;
     border: 1px solid black;
-    display: inline-block;
-    padding: 2px;
+    display: table-cell;
     position: relative;
 }
 
 .tierView {
     position: relative;
+}
+
+table {
+    border-collapse: collapse;
 }

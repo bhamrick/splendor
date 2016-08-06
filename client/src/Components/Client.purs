@@ -30,6 +30,7 @@ import Data.String as String
 import Data.StrMap (StrMap)
 import Data.StrMap as StrMap
 import Data.Tuple
+import Data.Unfoldable
 
 import Network.HTTP.Affjax
 import Network.HTTP.StatusCode
@@ -236,34 +237,60 @@ renderGameView selection dispatch p (RunningGame rg) _ =
     case rg.gameState of
         GameView gv ->
             [ R.div
-                [ RP.className "boardSupply" ]
+                [ RP.className "board" ]
                 [ R.div
-                    [ RP.className "availableChips" ]
-                    (renderAvailableChips selection dispatch p gv.availableChips [])
+                    [ RP.className "boardSupply" ]
+                    [ R.div
+                        [ RP.className "availableChips" ]
+                        (renderAvailableChips selection dispatch p gv.availableChips [])
+                    , R.div
+                        [ RP.className "actionArea" ]
+                        (renderActionButtons selection dispatch p (GameView gv) [])
+                    ]
                 , R.div
-                    [ RP.className "actionArea" ]
-                    (renderActionButtons selection dispatch p (GameView gv) [])
+                    [ RP.className "tierView" ]
+                    (renderTierView selection dispatch p gv.tier3View [])
+                , R.div
+                    [ RP.className "tierView" ]
+                    (renderTierView selection dispatch p gv.tier2View [])
+                , R.div
+                    [ RP.className "tierView" ]
+                    (renderTierView selection dispatch p gv.tier1View [])
                 ]
             , R.div
-                [ RP.className "tierView" ]
-                (renderTierView selection dispatch p gv.tier3View [])
-            , R.div
-                [ RP.className "tierView" ]
-                (renderTierView selection dispatch p gv.tier2View [])
-            , R.div
-                [ RP.className "tierView" ]
-                (renderTierView selection dispatch p gv.tier1View [])
-            , R.div
-                [ RP.className "playerBoards" ]
-                ([ R.div
-                    [ RP.className "myBoard" ]
-                    (renderPlayerState selection dispatch p gv.playerState [])
-                ] <>
-                map (\opp ->
-                    R.div
-                        [ RP.className "oppBoard" ]
-                        []
-                ) gv.opponentViews)
+                [ RP.className "players" ]
+                [ R.table
+                    [ RP.className "playerBoards" ]
+                    ([ R.tr
+                        [ RP.className "playerRow" ]
+                        [ R.td
+                            [ RP.className "playerName" ]
+                            [ R.text (fromMaybe "Player" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup gv.playerPosition rg.players))
+                            ]
+                        , R.td
+                            [ RP.className "myBoard" ]
+                            [ R.table
+                                []
+                                (renderPlayerState selection dispatch p gv.playerState [])
+                            ]
+                        ]
+                    ] <>
+                    Array.zipWith (\idx opp ->
+                        R.tr
+                            [ RP.className "playerRow" ]
+                            [ R.td
+                                [ RP.className "playerName" ]
+                                [ R.text (fromMaybe "Opponent" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup ((gv.playerPosition + 1 + idx)`mod` gv.numPlayers) rg.players))
+                                ]
+                            , R.td
+                                [ RP.className "oppBoard" ]
+                                [ R.table
+                                    []
+                                    (renderPlayerView dispatch p opp [])
+                                ]
+                            ]
+                    ) (Array.range 0 (Array.length gv.opponentViews - 1)) gv.opponentViews)
+                ]
             ]
 
 renderActionButtons :: Maybe ActionSelection -> T.Render GameView _ _
@@ -388,10 +415,10 @@ renderAvailableChips selection dispatch p chips _ =
 
 renderPlayerState :: Maybe ActionSelection -> T.Render PlayerState _ _
 renderPlayerState selection dispatch p (PlayerState ps) _ =
-    map (\color -> R.div
-        [ RP.className "psGroup"
+    [ R.tr
+        [ RP.className "cardRow"
         ]
-        [ R.div
+        (map (\color -> R.td
             [ RP.className "ownedCards"
             ]
             (map (\card ->
@@ -401,26 +428,11 @@ renderPlayerState selection dispatch p (PlayerState ps) _ =
                     (renderCard dispatch p card [])
                 ) (Array.reverse $ Array.filter (\(Card c) -> c.color == color) ps.ownedCards)
             )
-        , R.div
-            [ RP.className "ownedChips"
-            ]
-            (if chipNumber (Basic color) ps.heldChips > 0
-                then
-                    [ R.div
-                        [ RP.className (String.joinWith " " ["chip", colorClass color])
-                        ]
-                        [ R.text (show $ chipNumber (Basic color) ps.heldChips)
-                        ]
-                    ]
-                else []
-            )
-        ]
-    ) [Red, Green, Blue, White, Black] <>
-    [ R.div
-        [ RP.className "psSpecial"
-        ]
-        [ R.div
+        ) [Red, Green, Blue, White, Black] <>
+        [ R.td [] []
+        , R.td
             [ RP.className "reservedCards"
+            , RP.rowSpan "2"
             ]
             (map (\card ->
                 R.div
@@ -429,24 +441,89 @@ renderPlayerState selection dispatch p (PlayerState ps) _ =
                     (renderCard dispatch p card [])
                 ) (Array.reverse ps.reservedCards)
             )
-        , R.div
-            [ RP.className "ownedChips"
-            ]
-            (if chipNumber Gold ps.heldChips > 0
-                then
-                    [ R.div
-                        [ RP.className "chip gold"
-                        ]
-                        [ R.text (show $ chipNumber Gold ps.heldChips)
-                        ]
-                    ]
-                else []
-            )
+        ])
+    , R.tr
+        [ RP.className "chipRow"
         ]
+        (map (\ctype ->
+            R.td
+                [ RP.className "ownedChips"
+                ]
+                (if chipNumber ctype ps.heldChips > 0
+                    then
+                        [ R.div
+                            [ RP.className (String.joinWith " " ["chip", chipClass ctype])
+                            ]
+                            [ R.text (show $ chipNumber ctype ps.heldChips)
+                            ]
+                        ]
+                    else []
+                )
+            ) [Basic Red, Basic Green, Basic Blue, Basic White, Basic Black, Gold]
+        )
     ]
     where
     chipNumber ctype chips =
         fromMaybe 0 (Map.lookup ctype chips)
+
+renderPlayerView :: T.Render PlayerView _ _
+renderPlayerView dispatch p (PlayerView pv) _ =
+    [ R.tr
+        [ RP.className "cardRow"
+        ]
+        (map (\color -> R.td
+            [ RP.className "ownedCards"
+            ]
+            (map (\card ->
+                R.div
+                    [ RP.className "card"
+                    ]
+                    (renderCard dispatch p card [])
+                ) (Array.reverse $ Array.filter (\(Card c) -> c.color == color) pv.ownedCards)
+            )
+        ) [Red, Green, Blue, White, Black] <>
+        [ R.td [] []
+        , R.td
+            [ RP.className "reservedCards"
+            , RP.rowSpan "2"
+            ]
+            (replicate pv.reservedCardCount (
+                R.div
+                    [ RP.className "facedownCard"
+                    ]
+                    [ R.text "\x00a0" ]
+                )
+            )
+        ])
+    , R.tr
+        [ RP.className "chipRow"
+        ]
+        (map (\ctype ->
+            R.td
+                [ RP.className "ownedChips"
+                ]
+                (if chipNumber ctype pv.heldChips > 0
+                    then
+                        [ R.div
+                            [ RP.className (String.joinWith " " ["chip", chipClass ctype])
+                            ]
+                            [ R.text (show $ chipNumber ctype pv.heldChips)
+                            ]
+                        ]
+                    else []
+                )
+            ) [Basic Red, Basic Green, Basic Blue, Basic White, Basic Black, Gold]
+        )
+    ]
+    where
+    chipNumber ctype chips =
+        fromMaybe 0 (Map.lookup ctype chips)
+
+chipClass :: ChipType -> String
+chipClass ctype =
+    case ctype of
+        Basic c -> colorClass c
+        Gold -> "gold"
 
 colorClass :: Color -> String
 colorClass c =
