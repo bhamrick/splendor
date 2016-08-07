@@ -241,54 +241,57 @@ renderGameView selection dispatch p (RunningGame rg) _ =
     case rg.gameState of
         GameView gv ->
             [ R.div
-                [ RP.className "board" ]
+                [ RP.className "wrapper" ]
                 [ R.div
-                    [ RP.className "actionRequestText" ]
-                    [ R.text (actionRequestText gv.currentRequest rg.players)
-                    ]
-                , R.div
-                    [ RP.className "boardSupply" ]
+                    [ RP.className "board" ]
                     [ R.div
-                        [ RP.className "availableChips" ]
-                        (renderAvailableChips selection dispatch p gv.availableChips [])
+                        [ RP.className "actionRequestText" ]
+                        [ R.text (actionRequestText gv.currentRequest rg.players)
+                        ]
                     , R.div
-                        [ RP.className "actionArea" ]
-                        (renderActionButtons selection dispatch p (GameView gv) [])
+                        [ RP.className "boardSupply" ]
+                        [ R.div
+                            [ RP.className "availableChips" ]
+                            (renderAvailableChips selection dispatch p gv.availableChips [])
+                        , R.div
+                            [ RP.className "actionArea" ]
+                            (renderActionButtons selection dispatch p (GameView gv) [])
+                        ]
+                    , R.div [ RP.className "availableNobles" ]
+                        (renderAvailableNobles selection dispatch p gv.availableNobles [])
+                    , R.div
+                        [ RP.className "tierView" ]
+                        (renderTierView selection 3 dispatch p gv.tier3View [])
+                    , R.div
+                        [ RP.className "tierView" ]
+                        (renderTierView selection 2 dispatch p gv.tier2View [])
+                    , R.div
+                        [ RP.className "tierView" ]
+                        (renderTierView selection 1 dispatch p gv.tier1View [])
                     ]
-                , R.div [ RP.className "availableNobles" ]
-                    (renderAvailableNobles selection dispatch p gv.availableNobles [])
                 , R.div
-                    [ RP.className "tierView" ]
-                    (renderTierView selection 3 dispatch p gv.tier3View [])
-                , R.div
-                    [ RP.className "tierView" ]
-                    (renderTierView selection 2 dispatch p gv.tier2View [])
-                , R.div
-                    [ RP.className "tierView" ]
-                    (renderTierView selection 1 dispatch p gv.tier1View [])
-                ]
-            , R.div
-                [ RP.className "players" ]
-                [ R.table
-                    [ RP.className "playerBoards" ]
-                    [ R.tbody []
-                        ([ R.tr
-                            [ RP.className "playerRow" ]
-                            ([ R.td
-                                [ RP.className "playerName" ]
-                                [ R.text (fromMaybe "Player" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup gv.playerPosition rg.players))
-                                ]
-                            ] <> renderPlayerState selection dispatch p gv.playerState [])
-                        ] <>
-                        Array.zipWith (\idx opp ->
-                            R.tr
+                    [ RP.className "players" ]
+                    [ R.table
+                        [ RP.className "playerBoards" ]
+                        [ R.tbody []
+                            ([ R.tr
                                 [ RP.className "playerRow" ]
                                 ([ R.td
                                     [ RP.className "playerName" ]
-                                    [ R.text (fromMaybe "Opponent" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup ((gv.playerPosition + 1 + idx)`mod` gv.numPlayers) rg.players))
+                                    [ R.text (fromMaybe "Player" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup gv.playerPosition rg.players))
                                     ]
-                                ] <> renderPlayerView dispatch p opp [])
-                        ) (Array.range 0 (Array.length gv.opponentViews - 1)) gv.opponentViews)
+                                ] <> renderPlayerState selection dispatch p gv.playerState [])
+                            ] <>
+                            Array.zipWith (\idx opp ->
+                                R.tr
+                                    [ RP.className "playerRow" ]
+                                    ([ R.td
+                                        [ RP.className "playerName" ]
+                                        [ R.text (fromMaybe "Opponent" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup ((gv.playerPosition + 1 + idx)`mod` gv.numPlayers) rg.players))
+                                        ]
+                                    ] <> renderPlayerView dispatch p opp [])
+                            ) (Array.range 0 (Array.length gv.opponentViews - 1)) gv.opponentViews)
+                        ]
                     ]
                 ]
             ]
