@@ -422,7 +422,7 @@ initState n = do
         tier1Deck = zipWith (\card i -> card & cardId .~ CardId i) tier1CardOrder [1 .. numCards1]
         tier2Deck = zipWith (\card i -> card & cardId .~ CardId i) tier2CardOrder [numCards1 + 1 .. numCards1 + numCards2]
         tier3Deck = zipWith (\card i -> card & cardId .~ CardId i) tier3CardOrder [numCards1 + numCards2 + 1 .. numCards1 + numCards2 + numCards3]
-    playNobles <- take (n+1) <$> shuffleM nobleSet
+    playNobles <- zipWith (\i noble -> noble & nobleId .~ NobleId i) [1..] . take (n+1) <$> shuffleM nobleSet
     if n < 2 || n > 4
     then
         pure Nothing

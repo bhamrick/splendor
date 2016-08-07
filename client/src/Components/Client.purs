@@ -42,6 +42,8 @@ import Splendor.Types
 data ActionSelection
     = TakeChipsSelection (Array Color)
     | CardSelection CardId
+    | TopDeckSelection Int
+    | NobleSelection NobleId
 
 derive instance genericActionSelection :: Generic ActionSelection
 
@@ -69,6 +71,8 @@ data ClientAction
     | ClearSelection
     | SelectChip Color
     | SelectCard CardId
+    | SelectTopDeck Int
+    | SelectAvailableNoble NobleId
     | DoGameAction Action
 
 newKey :: forall e. Eff (random :: RANDOM | e) String
@@ -239,6 +243,10 @@ renderGameView selection dispatch p (RunningGame rg) _ =
             [ R.div
                 [ RP.className "board" ]
                 [ R.div
+                    [ RP.className "actionRequestText" ]
+                    [ R.text (actionRequestText gv.currentRequest rg.players)
+                    ]
+                , R.div
                     [ RP.className "boardSupply" ]
                     [ R.div
                         [ RP.className "availableChips" ]
@@ -247,51 +255,67 @@ renderGameView selection dispatch p (RunningGame rg) _ =
                         [ RP.className "actionArea" ]
                         (renderActionButtons selection dispatch p (GameView gv) [])
                     ]
+                , R.div [ RP.className "availableNobles" ]
+                    (renderAvailableNobles selection dispatch p gv.availableNobles [])
                 , R.div
                     [ RP.className "tierView" ]
-                    (renderTierView selection dispatch p gv.tier3View [])
+                    (renderTierView selection 3 dispatch p gv.tier3View [])
                 , R.div
                     [ RP.className "tierView" ]
-                    (renderTierView selection dispatch p gv.tier2View [])
+                    (renderTierView selection 2 dispatch p gv.tier2View [])
                 , R.div
                     [ RP.className "tierView" ]
-                    (renderTierView selection dispatch p gv.tier1View [])
+                    (renderTierView selection 1 dispatch p gv.tier1View [])
                 ]
             , R.div
                 [ RP.className "players" ]
                 [ R.table
                     [ RP.className "playerBoards" ]
-                    ([ R.tr
-                        [ RP.className "playerRow" ]
-                        [ R.td
-                            [ RP.className "playerName" ]
-                            [ R.text (fromMaybe "Player" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup gv.playerPosition rg.players))
-                            ]
-                        , R.td
-                            [ RP.className "myBoard" ]
-                            [ R.table
-                                []
-                                (renderPlayerState selection dispatch p gv.playerState [])
-                            ]
-                        ]
-                    ] <>
-                    Array.zipWith (\idx opp ->
-                        R.tr
+                    [ R.tbody []
+                        ([ R.tr
                             [ RP.className "playerRow" ]
                             [ R.td
                                 [ RP.className "playerName" ]
-                                [ R.text (fromMaybe "Opponent" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup ((gv.playerPosition + 1 + idx)`mod` gv.numPlayers) rg.players))
+                                [ R.text (fromMaybe "Player" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup gv.playerPosition rg.players))
                                 ]
                             , R.td
-                                [ RP.className "oppBoard" ]
-                                [ R.table
-                                    []
-                                    (renderPlayerView dispatch p opp [])
+                                [ RP.className "myBoard" ]
+                                [ R.table []
+                                    [ R.tbody []
+                                        (renderPlayerState selection dispatch p gv.playerState [])
+                                    ]
                                 ]
                             ]
-                    ) (Array.range 0 (Array.length gv.opponentViews - 1)) gv.opponentViews)
+                        ] <>
+                        Array.zipWith (\idx opp ->
+                            R.tr
+                                [ RP.className "playerRow" ]
+                                [ R.td
+                                    [ RP.className "playerName" ]
+                                    [ R.text (fromMaybe "Opponent" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup ((gv.playerPosition + 1 + idx)`mod` gv.numPlayers) rg.players))
+                                    ]
+                                , R.td
+                                    [ RP.className "oppBoard" ]
+                                    [ R.table []
+                                        [ R.tbody []
+                                            (renderPlayerView dispatch p opp [])
+                                        ]
+                                    ]
+                                ]
+                        ) (Array.range 0 (Array.length gv.opponentViews - 1)) gv.opponentViews)
+                    ]
                 ]
             ]
+
+actionRequestText :: ActionRequest -> Map Int PlayerInfo -> String
+actionRequestText (ActionRequest ar) players =
+    "Waiting for "
+    <> (fromMaybe "Unknown Player" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup ar.player players))
+    <> (case ar.type_ of
+        TurnRequest -> " to take their turn."
+        DiscardChipRequest n -> " to discard " <> (show n) <> " chips."
+        SelectNobleRequest -> " to select a noble to gain."
+    )
 
 renderActionButtons :: Maybe ActionSelection -> T.Render GameView _ _
 renderActionButtons selection dispatch p (GameView gv) _ =
@@ -332,11 +356,25 @@ renderActionButtons selection dispatch p (GameView gv) _ =
                 [ R.text "Reserve"
                 ]
             ]
+        Just (TopDeckSelection tier) ->
+            [ R.button
+                [ RP.onClick \_ -> dispatch (DoGameAction (ReserveTop tier))
+                ]
+                [ R.text "Reserve Top Card"
+                ]
+            ]
+        Just (NobleSelection nid) ->    
+            [ R.button
+                [ RP.onClick \_ -> dispatch (DoGameAction (SelectNoble nid))
+                ]
+                [ R.text "Select"
+                ]
+            ]
     where
     numAvailableChipTypes = List.length <<< List.filter (\(Tuple _ n) -> n > 0) $ Map.toList gv.availableChips
 
-renderTierView :: Maybe ActionSelection -> T.Render TierView _ _
-renderTierView selection dispatch p (TierView tv) _ =
+renderTierView :: Maybe ActionSelection -> Int -> T.Render TierView _ _
+renderTierView selection tier dispatch p (TierView tv) _ =
     map (\(Card c) ->
         R.div
             (let
@@ -350,8 +388,14 @@ renderTierView selection dispatch p (TierView tv) _ =
             (renderCard dispatch p (Card c) [])
         ) tv.availableCards
     <> [ R.div
-        [ RP.className "tierDeck"
-        ]
+        (let
+        classes = if selection == Just (TopDeckSelection tier)
+            then "selected tierDeck"
+            else "tierDeck"
+        in
+        [ RP.className classes
+        , RP.onClick \_ -> dispatch (SelectTopDeck tier)
+        ])
         [ R.text (show tv.deckCount)
         ]
     ]
@@ -376,6 +420,38 @@ renderCard dispatch p (Card c) _ =
             ]) (Map.toList c.cost)
         )
     ]
+
+renderNoble :: T.Render Noble _ _
+renderNoble dispatch p (Noble n) _ =
+    [ R.div
+        [ RP.className "nobleTop" ]
+        [ R.text (show n.points) ]
+    , R.div
+        [ RP.className "nobleRequirement"
+        ]
+        (foldMap (\(Tuple c n) ->
+            [ R.div
+                [ RP.className (String.joinWith " " ["nobleRequirementComponent", colorClass c])
+                ]
+                [ R.text (show n)
+                ]
+            ]) (Map.toList n.requirement)
+        )
+    ]
+
+renderAvailableNobles :: Maybe ActionSelection -> T.Render (Array Noble) _ _
+renderAvailableNobles selection dispatch p nobles _ =
+    map (\(Noble n) -> R.div
+        (let
+        classes = if selection == Just (NobleSelection n.id)
+            then "selected noble"
+            else "noble"
+        in
+        [ RP.className classes
+        , RP.onClick \_ -> dispatch (SelectAvailableNoble n.id)
+        ])
+        (renderNoble dispatch p (Noble n) [])
+    ) nobles
 
 renderAvailableChips :: Maybe ActionSelection -> T.Render (Map ChipType Int) _ _
 renderAvailableChips selection dispatch p chips _ =
@@ -446,7 +522,13 @@ renderPlayerState selection dispatch p (PlayerState ps) _ =
                     ])
                     (renderCard dispatch p (Card c) [])
                 ) (Array.reverse ps.reservedCards)
-            )
+            <> [ R.br [] [] ]
+            <> map (\noble ->
+                R.div
+                    [ RP.className "noble"
+                    ]
+                    (renderNoble dispatch p noble [])
+            ) ps.ownedNobles)
         ])
     , R.tr
         [ RP.className "chipRow"
@@ -499,7 +581,13 @@ renderPlayerView dispatch p (PlayerView pv) _ =
                     ]
                     [ R.text "\x00a0" ]
                 )
-            )
+            <> [ R.br [] [] ]
+            <> map (\noble ->
+                R.div
+                    [ RP.className "noble"
+                    ]
+                    (renderNoble dispatch p noble [])
+            ) pv.ownedNobles)
         ])
     , R.tr
         [ RP.className "chipRow"
@@ -593,6 +681,14 @@ performAction a p s =
             if s.currentSelection == Just (CardSelection cardId)
                 then void $ T.cotransform (\state -> state { currentSelection = Nothing })
                 else void $ T.cotransform (\state -> state { currentSelection = Just $ CardSelection cardId })
+        SelectTopDeck tier -> do
+            if s.currentSelection == Just (TopDeckSelection tier)
+                then void $ T.cotransform (\state -> state { currentSelection = Nothing })
+                else void $ T.cotransform (\state -> state { currentSelection = Just $ TopDeckSelection tier })
+        SelectAvailableNoble nid -> do
+            if s.currentSelection == Just (NobleSelection nid)
+                then void $ T.cotransform (\state -> state { currentSelection = Nothing })
+                else void $ T.cotransform (\state -> state { currentSelection = Just (NobleSelection nid) })
         DoGameAction action -> do
             case s.currentLobbyKey of
                 Nothing -> pure unit
