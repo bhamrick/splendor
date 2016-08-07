@@ -274,34 +274,20 @@ renderGameView selection dispatch p (RunningGame rg) _ =
                     [ R.tbody []
                         ([ R.tr
                             [ RP.className "playerRow" ]
-                            [ R.td
+                            ([ R.td
                                 [ RP.className "playerName" ]
                                 [ R.text (fromMaybe "Player" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup gv.playerPosition rg.players))
                                 ]
-                            , R.td
-                                [ RP.className "myBoard" ]
-                                [ R.table []
-                                    [ R.tbody []
-                                        (renderPlayerState selection dispatch p gv.playerState [])
-                                    ]
-                                ]
-                            ]
+                            ] <> renderPlayerState selection dispatch p gv.playerState [])
                         ] <>
                         Array.zipWith (\idx opp ->
                             R.tr
                                 [ RP.className "playerRow" ]
-                                [ R.td
+                                ([ R.td
                                     [ RP.className "playerName" ]
                                     [ R.text (fromMaybe "Opponent" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup ((gv.playerPosition + 1 + idx)`mod` gv.numPlayers) rg.players))
                                     ]
-                                , R.td
-                                    [ RP.className "oppBoard" ]
-                                    [ R.table []
-                                        [ R.tbody []
-                                            (renderPlayerView dispatch p opp [])
-                                        ]
-                                    ]
-                                ]
+                                ] <> renderPlayerView dispatch p opp [])
                         ) (Array.range 0 (Array.length gv.opponentViews - 1)) gv.opponentViews)
                     ]
                 ]
@@ -491,64 +477,72 @@ renderAvailableChips selection dispatch p chips _ =
 
 renderPlayerState :: Maybe ActionSelection -> T.Render PlayerState _ _
 renderPlayerState selection dispatch p (PlayerState ps) _ =
-    [ R.tr
-        [ RP.className "cardRow"
-        ]
-        (map (\color -> R.td
-            [ RP.className "ownedCards"
-            ]
-            (map (\card ->
-                R.div
-                    [ RP.className "card"
+    [ R.td
+        []
+        [ R.table []
+            [ R.tbody []
+                [ R.tr
+                    [ RP.className "cardRow"
                     ]
-                    (renderCard dispatch p card [])
-                ) (Array.reverse $ Array.filter (\(Card c) -> c.color == color) ps.ownedCards)
-            )
-        ) [Red, Green, Blue, White, Black] <>
-        [ R.td [] []
-        , R.td
-            [ RP.className "reservedCards"
-            , RP.rowSpan "2"
-            ]
-            (map (\(Card c) ->
-                R.div
-                    (let
-                    classes = if selection == Just (CardSelection c.id)
-                        then "selected card"
-                        else "card"
-                    in
-                    [ RP.className classes
-                    , RP.onClick \_ -> dispatch (SelectCard c.id)
-                    ])
-                    (renderCard dispatch p (Card c) [])
-                ) (Array.reverse ps.reservedCards)
-            <> [ R.br [] [] ]
-            <> map (\noble ->
-                R.div
-                    [ RP.className "noble"
-                    ]
-                    (renderNoble dispatch p noble [])
-            ) ps.ownedNobles)
-        ])
-    , R.tr
-        [ RP.className "chipRow"
-        ]
-        (map (\ctype ->
-            R.td
-                [ RP.className "ownedChips"
-                ]
-                (if chipNumber ctype ps.heldChips > 0
-                    then
-                        [ R.div
-                            [ RP.className (String.joinWith " " ["chip", chipClass ctype])
-                            ]
-                            [ R.text (show $ chipNumber ctype ps.heldChips)
-                            ]
+                    (map (\color -> R.td
+                        [ RP.className "ownedCards"
                         ]
-                    else []
-                )
-            ) [Basic Red, Basic Green, Basic Blue, Basic White, Basic Black, Gold]
-        )
+                        (map (\card ->
+                            R.div
+                                [ RP.className "card"
+                                ]
+                                (renderCard dispatch p card [])
+                            ) (Array.reverse $ Array.filter (\(Card c) -> c.color == color) ps.ownedCards)
+                        )
+                    ) [Red, Green, Blue, White, Black])
+                , R.tr
+                    [ RP.className "chipRow"
+                    ]
+                    (map (\ctype ->
+                        R.td
+                            [ RP.className "ownedChips"
+                            ]
+                            (if chipNumber ctype ps.heldChips > 0
+                                then
+                                    [ R.div
+                                        [ RP.className (String.joinWith " " ["chip", chipClass ctype])
+                                        ]
+                                        [ R.text (show $ chipNumber ctype ps.heldChips)
+                                        ]
+                                    ]
+                                else []
+                            )
+                        ) [Basic Red, Basic Green, Basic Blue, Basic White, Basic Black, Gold]
+                    )
+                ]
+            ]
+        ]
+    , R.td
+        [ RP.className "reservedCards"
+        ]
+        ([ R.div 
+            [ RP.className "currentVP" ]
+            [ R.text ("Current VP: " <> show ps.currentVP) ]
+        ]
+        <> map (\(Card c) ->
+            R.div
+                (let
+                classes = if selection == Just (CardSelection c.id)
+                    then "selected card"
+                    else "card"
+                in
+                [ RP.className classes
+                , RP.onClick \_ -> dispatch (SelectCard c.id)
+                ])
+                (renderCard dispatch p (Card c) [])
+            ) (Array.reverse ps.reservedCards)
+        <> [ R.br [] [] ]
+        <> map (\noble ->
+            R.div
+                [ RP.className "noble"
+                ]
+                (renderNoble dispatch p noble [])
+        ) ps.ownedNobles)
     ]
     where
     chipNumber ctype chips =
@@ -556,58 +550,66 @@ renderPlayerState selection dispatch p (PlayerState ps) _ =
 
 renderPlayerView :: T.Render PlayerView _ _
 renderPlayerView dispatch p (PlayerView pv) _ =
-    [ R.tr
-        [ RP.className "cardRow"
-        ]
-        (map (\color -> R.td
-            [ RP.className "ownedCards"
-            ]
-            (map (\card ->
-                R.div
-                    [ RP.className "card"
+    [ R.td
+        []
+        [ R.table []
+            [ R.tbody []
+                [ R.tr
+                    [ RP.className "cardRow"
                     ]
-                    (renderCard dispatch p card [])
-                ) (Array.reverse $ Array.filter (\(Card c) -> c.color == color) pv.ownedCards)
-            )
-        ) [Red, Green, Blue, White, Black] <>
-        [ R.td [] []
-        , R.td
-            [ RP.className "reservedCards"
-            , RP.rowSpan "2"
-            ]
-            (replicate pv.reservedCardCount (
-                R.div
-                    [ RP.className "facedownCard"
-                    ]
-                    [ R.text "\x00a0" ]
-                )
-            <> [ R.br [] [] ]
-            <> map (\noble ->
-                R.div
-                    [ RP.className "noble"
-                    ]
-                    (renderNoble dispatch p noble [])
-            ) pv.ownedNobles)
-        ])
-    , R.tr
-        [ RP.className "chipRow"
-        ]
-        (map (\ctype ->
-            R.td
-                [ RP.className "ownedChips"
-                ]
-                (if chipNumber ctype pv.heldChips > 0
-                    then
-                        [ R.div
-                            [ RP.className (String.joinWith " " ["chip", chipClass ctype])
-                            ]
-                            [ R.text (show $ chipNumber ctype pv.heldChips)
-                            ]
+                    (map (\color -> R.td
+                        [ RP.className "ownedCards"
                         ]
-                    else []
-                )
-            ) [Basic Red, Basic Green, Basic Blue, Basic White, Basic Black, Gold]
-        )
+                        (map (\card ->
+                            R.div
+                                [ RP.className "card"
+                                ]
+                                (renderCard dispatch p card [])
+                            ) (Array.reverse $ Array.filter (\(Card c) -> c.color == color) pv.ownedCards)
+                        )
+                    ) [Red, Green, Blue, White, Black])
+                , R.tr
+                    [ RP.className "chipRow"
+                    ]
+                    (map (\ctype ->
+                        R.td
+                            [ RP.className "ownedChips"
+                            ]
+                            (if chipNumber ctype pv.heldChips > 0
+                                then
+                                    [ R.div
+                                        [ RP.className (String.joinWith " " ["chip", chipClass ctype])
+                                        ]
+                                        [ R.text (show $ chipNumber ctype pv.heldChips)
+                                        ]
+                                    ]
+                                else []
+                            )
+                        ) [Basic Red, Basic Green, Basic Blue, Basic White, Basic Black, Gold]
+                    )
+                ]
+            ]
+        ]
+    , R.td
+        [ RP.className "reservedCards"
+        ]
+        ([ R.div
+            [ RP.className "currentVP" ]
+            [ R.text ("Current VP: " <> show pv.currentVP) ]
+        ]
+        <> replicate pv.reservedCardCount (
+            R.div
+                [ RP.className "facedownCard"
+                ]
+                [ R.text "\x00a0" ]
+            )
+        <> [ R.br [] [] ]
+        <> map (\noble ->
+            R.div
+                [ RP.className "noble"
+                ]
+                (renderNoble dispatch p noble [])
+        ) pv.ownedNobles)
     ]
     where
     chipNumber ctype chips =

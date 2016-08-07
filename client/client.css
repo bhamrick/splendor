@@ -8,13 +8,14 @@
 
 .playerRow {
     display: table-row;
+    border: 1px solid black;
 }
 
 .playerName {
     display: table-cell;
     padding: 0.3em;
     vertical-align: middle;
-    text-align: right;
+    text-align: left;
 }
 
 .card {
@@ -288,4 +289,8 @@ table {
     font-size: 16px;
     text-align: center;
     padding: 0.2em;
+}
+
+.currentVP {
+    text-align: center;
 }
