@@ -434,11 +434,17 @@ renderPlayerState selection dispatch p (PlayerState ps) _ =
             [ RP.className "reservedCards"
             , RP.rowSpan "2"
             ]
-            (map (\card ->
+            (map (\(Card c) ->
                 R.div
-                    [ RP.className "card"
-                    ]
-                    (renderCard dispatch p card [])
+                    (let
+                    classes = if selection == Just (CardSelection c.id)
+                        then "selected card"
+                        else "card"
+                    in
+                    [ RP.className classes
+                    , RP.onClick \_ -> dispatch (SelectCard c.id)
+                    ])
+                    (renderCard dispatch p (Card c) [])
                 ) (Array.reverse ps.reservedCards)
             )
         ])

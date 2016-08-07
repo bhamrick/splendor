@@ -178,6 +178,7 @@
     display: table-cell;
     border-left: 1px solid black;
     min-width: 96px;
+    vertical-align: top;
 }
 
 .chipRow {
