@@ -44,11 +44,15 @@ data ActionSelection
     | CardSelection CardId
     | TopDeckSelection Int
     | NobleSelection NobleId
-
-derive instance genericActionSelection :: Generic ActionSelection
+    | DiscardSelection (Map ChipType Int)
 
 instance eqActionSelection :: Eq ActionSelection where
-    eq = gEq
+    eq (TakeChipsSelection cs1) (TakeChipsSelection cs2) = eq cs1 cs2
+    eq (CardSelection cid1) (CardSelection cid2) = eq cid1 cid2
+    eq (TopDeckSelection tier1) (TopDeckSelection tier2) = eq tier1 tier2
+    eq (NobleSelection nid1) (NobleSelection nid2) = eq nid1 nid2
+    eq (DiscardSelection chips1) (DiscardSelection chips2) = eq chips1 chips2
+    eq _ _ = false
 
 type ClientState =
     { clientKey :: String
@@ -73,6 +77,8 @@ data ClientAction
     | SelectCard CardId
     | SelectTopDeck Int
     | SelectAvailableNoble NobleId
+    | AddToDiscard ChipType
+    | RemoveFromDiscard ChipType
     | DoGameAction Action
 
 newKey :: forall e. Eff (random :: RANDOM | e) String
@@ -248,14 +254,25 @@ renderGameView selection dispatch p (RunningGame rg) _ =
                         [ RP.className "actionRequestText" ]
                         [ R.text (actionRequestText gv.currentRequest rg.players)
                         ]
-                    , R.div
+                    , R.table
                         [ RP.className "boardSupply" ]
-                        [ R.div
-                            [ RP.className "availableChips" ]
-                            (renderAvailableChips selection dispatch p gv.availableChips [])
-                        , R.div
-                            [ RP.className "actionArea" ]
-                            (renderActionButtons selection dispatch p (GameView gv) [])
+                        [ R.tbody []
+                            [ R.td []
+                                [ R.table []
+                                    [ R.tbody []
+                                        [ R.tr
+                                            [ RP.className "availableChips" ]
+                                            (renderAvailableChips selection dispatch p gv.availableChips [])
+                                        , R.tr
+                                            [ RP.className "discardChips" ]
+                                            (renderDiscardChips selection dispatch p unit [])
+                                        ]
+                                    ]
+                                ]
+                            , R.td
+                                [ RP.className "actionArea" ]
+                                (renderActionButtons selection dispatch p (GameView gv) [])
+                            ]
                         ]
                     , R.div [ RP.className "availableNobles" ]
                         (renderAvailableNobles selection dispatch p gv.availableNobles [])
@@ -359,8 +376,15 @@ renderActionButtons selection dispatch p (GameView gv) _ =
                 [ R.text "Select"
                 ]
             ]
+        Just (DiscardSelection chips) ->
+            [ R.button
+                [ RP.onClick \_ -> dispatch (DoGameAction (Discard chips))
+                ]
+                [ R.text "Confirm Discard"
+                ]
+            ]
     where
-    numAvailableChipTypes = List.length <<< List.filter (\(Tuple _ n) -> n > 0) $ Map.toList gv.availableChips
+    numAvailableChipTypes = List.length <<< List.filter (\(Tuple ctype n) -> ctype /= Gold && n > 0) $ Map.toList gv.availableChips
 
 renderTierView :: Maybe ActionSelection -> Int -> T.Render TierView _ _
 renderTierView selection tier dispatch p (TierView tv) _ =
@@ -444,31 +468,73 @@ renderAvailableNobles selection dispatch p nobles _ =
 
 renderAvailableChips :: Maybe ActionSelection -> T.Render (Map ChipType Int) _ _
 renderAvailableChips selection dispatch p chips _ =
-    map (\ctype -> R.div
-        [ RP.className "chipPlaceholder" ]
-        (if chipNumber ctype chips > 0
-            then
-                [ R.div
-                    (let
-                    classes =
-                        case selection of
-                            Just (TakeChipsSelection colors) ->
-                                if any (\c -> Basic c == ctype) colors
-                                    then String.joinWith " " ["selected", "chip", chipColorClass ctype]
-                                    else String.joinWith " " ["chip", chipColorClass ctype]
-                            _ -> String.joinWith " " ["chip", chipColorClass ctype]
-                    in
-                    ([ RP.className classes
-                    ] <>
-                    case ctype of
-                        Basic color -> [ RP.onClick \_ -> dispatch (SelectChip color) ]
-                        Gold -> []
-                    ))
-                    [ R.text (show $ chipNumber ctype chips)
+    map (\ctype -> R.td []
+        [ R.div
+            [ RP.className "chipPlaceholder" ]
+            (if chipNumber ctype chips > 0
+                then
+                    [ R.div
+                        (let
+                        classes =
+                            case selection of
+                                Just (TakeChipsSelection colors) ->
+                                    if any (\c -> Basic c == ctype) colors
+                                        then String.joinWith " " ["selected", "chip", chipColorClass ctype]
+                                        else String.joinWith " " ["chip", chipColorClass ctype]
+                                _ -> String.joinWith " " ["chip", chipColorClass ctype]
+                        in
+                        ([ RP.className classes
+                        ] <>
+                        case ctype of
+                            Basic color -> [ RP.onClick \_ -> dispatch (SelectChip color) ]
+                            Gold -> []
+                        ))
+                        [ R.text (show $ chipNumber ctype chips)
+                        ]
                     ]
-                ]
-            else []
-        )
+                else []
+            )
+        ]
+    ) [Basic Red, Basic Green, Basic Blue, Basic White, Basic Black, Gold]
+    where
+    chipNumber ctype chips =
+        fromMaybe 0 (Map.lookup ctype chips)
+    chipColorClass ctype =
+        case ctype of
+            Basic color -> colorClass color
+            Gold -> "gold"
+
+renderDiscardChips :: Maybe ActionSelection -> T.Render Unit _ _
+renderDiscardChips selection dispatch p _ _ =
+    let
+    discardChips = case selection of
+        Just (DiscardSelection chips) -> chips
+        _ -> Map.empty
+    in
+    map (\ctype -> R.td []
+        [ R.div
+            [ RP.className "chipPlaceholder" ]
+            (if chipNumber ctype discardChips > 0
+                then
+                    [ R.div
+                        (let
+                        classes =
+                            case selection of
+                                Just (TakeChipsSelection colors) ->
+                                    if any (\c -> Basic c == ctype) colors
+                                        then String.joinWith " " ["selected", "chip", chipColorClass ctype]
+                                        else String.joinWith " " ["chip", chipColorClass ctype]
+                                _ -> String.joinWith " " ["chip", chipColorClass ctype]
+                        in
+                        ([ RP.className classes
+                        ] <>
+                        [ RP.onClick \_ -> dispatch (RemoveFromDiscard ctype) ]))
+                        [ R.text (show $ chipNumber ctype discardChips)
+                        ]
+                    ]
+                else []
+            )
+        ]
     ) [Basic Red, Basic Green, Basic Blue, Basic White, Basic Black, Gold]
     where
     chipNumber ctype chips =
@@ -480,6 +546,22 @@ renderAvailableChips selection dispatch p chips _ =
 
 renderPlayerState :: Maybe ActionSelection -> T.Render PlayerState _ _
 renderPlayerState selection dispatch p (PlayerState ps) _ =
+    let
+    chipsToRender =
+        case selection of
+            Just (DiscardSelection discards) ->
+                foldl (\m (Tuple ctype nDiscarded) ->
+                    Map.alter (\maybeN ->
+                        let
+                        n = fromMaybe 0 maybeN
+                        in
+                        if n <= nDiscarded
+                        then Nothing
+                        else Just (n - nDiscarded)
+                    ) ctype m
+                ) ps.heldChips (Map.toList discards)
+            _ -> ps.heldChips
+    in
     [ R.td
         []
         [ R.table []
@@ -488,14 +570,23 @@ renderPlayerState selection dispatch p (PlayerState ps) _ =
                     [ RP.className "cardRow"
                     ]
                     (map (\color -> R.td
-                        [ RP.className "ownedCards"
-                        ]
-                        (map (\card ->
-                            R.div
-                                [ RP.className "card"
-                                ]
-                                (renderCard dispatch p card [])
-                            ) (Array.reverse $ Array.filter (\(Card c) -> c.color == color) ps.ownedCards)
+                        [ RP.className "ownedCards" ]
+                        (let
+                        matchingCards = Array.reverse $ Array.filter (\(Card c) -> c.color == color) ps.ownedCards
+                        in
+                        if Array.null matchingCards
+                        then []
+                        else
+                            [ R.div
+                                [ RP.className "cardStack" ]
+                                (map (\card ->
+                                    R.div
+                                        [ RP.className "card"
+                                        ]
+                                        (renderCard dispatch p card [])
+                                    ) matchingCards
+                                )
+                            ]
                         )
                     ) [Red, Green, Blue, White, Black])
                 , R.tr
@@ -505,12 +596,17 @@ renderPlayerState selection dispatch p (PlayerState ps) _ =
                         R.td
                             [ RP.className "ownedChips"
                             ]
-                            (if chipNumber ctype ps.heldChips > 0
+                            (
+                            let
+                            nChips = chipNumber ctype chipsToRender
+                            in
+                            if nChips > 0
                                 then
                                     [ R.div
                                         [ RP.className (String.joinWith " " ["chip", chipClass ctype])
+                                        , RP.onClick \_ -> dispatch (AddToDiscard ctype)
                                         ]
-                                        [ R.text (show $ chipNumber ctype ps.heldChips)
+                                        [ R.text (show nChips)
                                         ]
                                     ]
                                 else []
@@ -563,12 +659,22 @@ renderPlayerView dispatch p (PlayerView pv) _ =
                     (map (\color -> R.td
                         [ RP.className "ownedCards"
                         ]
-                        (map (\card ->
-                            R.div
-                                [ RP.className "card"
-                                ]
-                                (renderCard dispatch p card [])
-                            ) (Array.reverse $ Array.filter (\(Card c) -> c.color == color) pv.ownedCards)
+                        (let
+                        matchingCards = Array.reverse $ Array.filter (\(Card c) -> c.color == color) pv.ownedCards
+                        in
+                        if Array.null matchingCards
+                        then []
+                        else
+                            [ R.div
+                                [ RP.className "cardStack" ]
+                                (map (\card ->
+                                    R.div
+                                        [ RP.className "card"
+                                        ]
+                                        (renderCard dispatch p card [])
+                                    ) (Array.reverse $ Array.filter (\(Card c) -> c.color == color) pv.ownedCards)
+                                )
+                            ]
                         )
                     ) [Red, Green, Blue, White, Black])
                 , R.tr
@@ -694,6 +800,19 @@ performAction a p s =
             if s.currentSelection == Just (NobleSelection nid)
                 then void $ T.cotransform (\state -> state { currentSelection = Nothing })
                 else void $ T.cotransform (\state -> state { currentSelection = Just (NobleSelection nid) })
+        AddToDiscard ctype -> do
+            case s.currentSelection of
+                Just (DiscardSelection chips) -> do
+                    void $ T.cotransform (\state -> state { currentSelection = Just (DiscardSelection (Map.alter (\n -> Just $ 1 + fromMaybe 0 n) ctype chips)) })
+                _ -> void $ T.cotransform (\state -> state { currentSelection = Just (DiscardSelection (Map.singleton ctype 1)) })
+        RemoveFromDiscard ctype -> do
+            case s.currentSelection of
+                Just (DiscardSelection chips) -> do
+                    void $ T.cotransform (\state -> state { currentSelection = Just (DiscardSelection (Map.alter (\n -> let n' = fromMaybe 0 n - 1 in if n' <= 0 then Nothing else Just n') ctype chips)) })
+                    void $ T.cotransform (\state -> if state.currentSelection == Just (DiscardSelection Map.empty)
+                        then state { currentSelection = Nothing }
+                        else state)
+                _ -> pure unit
         DoGameAction action -> do
             case s.currentLobbyKey of
                 Nothing -> pure unit

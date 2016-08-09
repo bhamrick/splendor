@@ -149,9 +149,23 @@
     cursor: default;
 }
 
-.chipPlaceholder {
-    width: 54px;
-    height: 54px;
+.availableChips .chipPlaceholder {
+    width: 50px;
+    height: 50px;
+    display: inline-block;
+    text-align: center;
+}
+
+.discardChips {
+    font-size: 0;
+}
+
+.discardChips td {
+    padding: 0;
+}
+
+.discardChips .chipPlaceholder {
+    width: 50px;
     display: inline-block;
     text-align: center;
 }
@@ -210,15 +224,11 @@
     color: black;
 }
 
-.availableChips {
-    display: inline-block;
-}
-
 .availableNobles {
     text-align: center;
 }
 
-.ownedCards .card {
+.cardStack .card {
     margin-bottom: -6em;
 }
 
@@ -227,12 +237,14 @@
 }
 
 .ownedCards {
-    display: table-cell;
-    padding: 3px;
-    padding-bottom: 5.5em;
     text-align: center;
     max-width: 96px;
     vertical-align: top;
+}
+
+.cardStack {
+    padding: 3px;
+    padding-bottom: 5.5em;
 }
 
 .ownedNobles {
@@ -280,10 +292,8 @@ table {
 }
 
 .actionArea {
-    display: inline-block;
-    margin-left: 5px;
-    position: relative;
-    top: -3px;
+    vertical-align: middle;
+    padding-left: 5px;
 }
 
 .actionArea button {
