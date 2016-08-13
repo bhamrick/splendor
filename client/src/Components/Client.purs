@@ -751,39 +751,75 @@ performAction a p s =
         ClearSelection -> do
             void $ T.cotransform (\state -> state { currentSelection = Nothing })
         SelectChip color -> do
-            case s.currentSelection of
-                Just (TakeChipsSelection selectedColors) ->
-                    if any (\c -> c == color) selectedColors
-                        then do
-                            void $ T.cotransform (\state -> state { currentSelection = Just $ TakeChipsSelection (Array.filter (\c -> c /= color) selectedColors) })
-                        else do
-                            void $ T.cotransform (\state -> state { currentSelection = Just $ TakeChipsSelection (Array.snoc selectedColors color) })
-                _ -> do
-                    void $ T.cotransform (\state -> state { currentSelection = Just $ TakeChipsSelection [color] })
+            case s.currentInstance of
+                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { currentRequest: ActionRequest ar } } }) ->
+                    case ar.type_ of
+                        TurnRequest ->
+                            case s.currentSelection of
+                                Just (TakeChipsSelection selectedColors) ->
+                                    if any (\c -> c == color) selectedColors
+                                        then do
+                                            void $ T.cotransform (\state -> state { currentSelection = Just $ TakeChipsSelection (Array.filter (\c -> c /= color) selectedColors) })
+                                        else do
+                                            void $ T.cotransform (\state -> state { currentSelection = Just $ TakeChipsSelection (Array.snoc selectedColors color) })
+                                _ -> do
+                                    void $ T.cotransform (\state -> state { currentSelection = Just $ TakeChipsSelection [color] })
+                        _ -> pure unit
+                _ -> pure unit
         SelectCard cardId -> do
-            if s.currentSelection == Just (CardSelection cardId)
-                then void $ T.cotransform (\state -> state { currentSelection = Nothing })
-                else void $ T.cotransform (\state -> state { currentSelection = Just $ CardSelection cardId })
+            case s.currentInstance of
+                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { currentRequest: ActionRequest ar } } }) ->
+                    case ar.type_ of
+                        TurnRequest ->
+                            if s.currentSelection == Just (CardSelection cardId)
+                                then void $ T.cotransform (\state -> state { currentSelection = Nothing })
+                                else void $ T.cotransform (\state -> state { currentSelection = Just $ CardSelection cardId })
+                        _ -> pure unit
+                _ -> pure unit
         SelectTopDeck tier -> do
-            if s.currentSelection == Just (TopDeckSelection tier)
-                then void $ T.cotransform (\state -> state { currentSelection = Nothing })
-                else void $ T.cotransform (\state -> state { currentSelection = Just $ TopDeckSelection tier })
+            case s.currentInstance of
+                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { currentRequest: ActionRequest ar } } }) ->
+                    case ar.type_ of
+                        TurnRequest ->
+                            if s.currentSelection == Just (TopDeckSelection tier)
+                                then void $ T.cotransform (\state -> state { currentSelection = Nothing })
+                                else void $ T.cotransform (\state -> state { currentSelection = Just $ TopDeckSelection tier })
+                        _ -> pure unit
+                _ -> pure unit
         SelectAvailableNoble nid -> do
-            if s.currentSelection == Just (NobleSelection nid)
-                then void $ T.cotransform (\state -> state { currentSelection = Nothing })
-                else void $ T.cotransform (\state -> state { currentSelection = Just (NobleSelection nid) })
+            case s.currentInstance of
+                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { currentRequest: ActionRequest ar } } }) ->
+                    case ar.type_ of
+                        SelectNobleRequest ->
+                            if s.currentSelection == Just (NobleSelection nid)
+                                then void $ T.cotransform (\state -> state { currentSelection = Nothing })
+                                else void $ T.cotransform (\state -> state { currentSelection = Just (NobleSelection nid) })
+                        _ -> pure unit
+                _ -> pure unit
         AddToDiscard ctype -> do
-            case s.currentSelection of
-                Just (DiscardSelection chips) -> do
-                    void $ T.cotransform (\state -> state { currentSelection = Just (DiscardSelection (Map.alter (\n -> Just $ 1 + fromMaybe 0 n) ctype chips)) })
-                _ -> void $ T.cotransform (\state -> state { currentSelection = Just (DiscardSelection (Map.singleton ctype 1)) })
+            case s.currentInstance of
+                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { currentRequest: ActionRequest ar } } }) ->
+                    case ar.type_ of
+                        DiscardChipRequest _ ->
+                            case s.currentSelection of
+                                Just (DiscardSelection chips) -> do
+                                    void $ T.cotransform (\state -> state { currentSelection = Just (DiscardSelection (Map.alter (\n -> Just $ 1 + fromMaybe 0 n) ctype chips)) })
+                                _ -> void $ T.cotransform (\state -> state { currentSelection = Just (DiscardSelection (Map.singleton ctype 1)) })
+                        _ -> pure unit
+                _ -> pure unit
         RemoveFromDiscard ctype -> do
-            case s.currentSelection of
-                Just (DiscardSelection chips) -> do
-                    void $ T.cotransform (\state -> state { currentSelection = Just (DiscardSelection (Map.alter (\n -> let n' = fromMaybe 0 n - 1 in if n' <= 0 then Nothing else Just n') ctype chips)) })
-                    void $ T.cotransform (\state -> if state.currentSelection == Just (DiscardSelection Map.empty)
-                        then state { currentSelection = Nothing }
-                        else state)
+            case s.currentInstance of
+                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { currentRequest: ActionRequest ar } } }) ->
+                    case ar.type_ of
+                        DiscardChipRequest _ ->
+                            case s.currentSelection of
+                                Just (DiscardSelection chips) -> do
+                                    void $ T.cotransform (\state -> state { currentSelection = Just (DiscardSelection (Map.alter (\n -> let n' = fromMaybe 0 n - 1 in if n' <= 0 then Nothing else Just n') ctype chips)) })
+                                    void $ T.cotransform (\state -> if state.currentSelection == Just (DiscardSelection Map.empty)
+                                        then state { currentSelection = Nothing }
+                                        else state)
+                                _ -> pure unit
+                        _ -> pure unit
                 _ -> pure unit
         DoGameAction action -> do
             case s.currentLobbyKey of
