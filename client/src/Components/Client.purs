@@ -38,6 +38,7 @@ import Network.HTTP.StatusCode
 import Components.PlayerInfo as PlayerInfo
 
 import Splendor.Types
+import Splendor.Rules
 
 data ActionSelection
     = TakeChipsSelection (Array Color)
@@ -325,66 +326,37 @@ actionRequestText (ActionRequest ar) players =
 
 renderActionButtons :: Maybe ActionSelection -> T.Render GameView _ _
 renderActionButtons selection dispatch p (GameView gv) _ =
-    case selection of
+    Array.mapMaybe (\(Tuple text action) ->
+        if isLegalAction (GameView gv) action
+        then Just $
+            R.button
+                [ RP.onClick \_ -> dispatch (DoGameAction action) ]
+                [ R.text text ]
+        else Nothing
+    ) (case selection of
         Nothing -> []
         Just (TakeChipsSelection colors) ->
-            (if Array.length colors == min 3 numAvailableChipTypes
-            then
-                [ R.button
-                    [ RP.onClick \_ -> dispatch (DoGameAction (Take3 (Array.index colors 0) (Array.index colors 1) (Array.index colors 2)))
-                    ]
-                    [ R.text "Take chips"
-                    ]
-                ]
-            else [])
-            <> (case Array.uncons colors of
+            (if Array.length colors <= 3
+            then [Tuple "Take Chips" (Take3 (Array.index colors 0) (Array.index colors 1) (Array.index colors 2))]
+            else []
+            ) <> (case Array.uncons colors of
                 Just { head: c, tail: rest } ->
-                    if Array.null rest && fromMaybe 0 (Map.lookup (Basic c) gv.availableChips) >= 4
-                    then
-                        [ R.button
-                            [ RP.onClick \_ -> dispatch (DoGameAction (Take2 c))
-                            ]
-                            [ R.text "Take two"
-                            ]
-                        ]
+                    if Array.null rest
+                    then [Tuple "Take Two" (Take2 c)]
                     else []
-                _ -> [])
-        Just (CardSelection cardId) ->
-            -- TODO: Check legality of reserve/buy 
-            [ R.button
-                [ RP.onClick \_ -> dispatch (DoGameAction (Buy cardId))
-                ]
-                [ R.text "Buy"
-                ]
-            , R.button
-                [ RP.onClick \_ -> dispatch (DoGameAction (Reserve cardId))
-                ]
-                [ R.text "Reserve"
-                ]
+                Nothing -> []
+            )
+        Just (CardSelection cid) ->
+            [ Tuple "Buy" (Buy cid)
+            , Tuple "Reserve" (Reserve cid)
             ]
         Just (TopDeckSelection tier) ->
-            [ R.button
-                [ RP.onClick \_ -> dispatch (DoGameAction (ReserveTop tier))
-                ]
-                [ R.text "Reserve Top Card"
-                ]
-            ]
-        Just (NobleSelection nid) ->    
-            [ R.button
-                [ RP.onClick \_ -> dispatch (DoGameAction (SelectNoble nid))
-                ]
-                [ R.text "Select"
-                ]
-            ]
-        Just (DiscardSelection chips) ->
-            [ R.button
-                [ RP.onClick \_ -> dispatch (DoGameAction (Discard chips))
-                ]
-                [ R.text "Confirm Discard"
-                ]
-            ]
-    where
-    numAvailableChipTypes = List.length <<< List.filter (\(Tuple ctype n) -> ctype /= Gold && n > 0) $ Map.toList gv.availableChips
+            [ Tuple "Reserve Top" (ReserveTop tier) ]
+        Just (NobleSelection nid) ->
+            [ Tuple "Select Noble" (SelectNoble nid) ]
+        Just (DiscardSelection discards) ->
+            [ Tuple "Confirm Discards" (Discard discards) ]
+    )
 
 renderTierView :: Maybe ActionSelection -> Int -> T.Render TierView _ _
 renderTierView selection tier dispatch p (TierView tv) _ =

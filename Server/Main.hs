@@ -35,15 +35,27 @@ work svar req = do
             servState <- readTVar svar
             case Map.lookup gameKey (servState^.instances) of
                 Nothing -> pure $ ErrorResponse "No such game"
-                Just inst -> do
-                    case Map.lookup (req^.playerKey) (inst^.playerKeys) of
+                Just (WaitingInstance {}) -> pure $ ErrorResponse "Game isn't started"
+                Just (CompletedInstance {}) -> pure $ ErrorResponse "Game is already complete"
+                Just (RunningInstance { _playerKeys = instKeys, _runningGame = instRG }) -> do
+                    case Map.lookup (req^.playerKey) instKeys of
                         Nothing -> pure $ ErrorResponse "Requesting player is not in the game"
                         Just idx -> do
-                            case (inst^?runningGame.gameState) >>= runAction idx act of
+                            case runAction idx act (instRG^.gameState) of
                                 Nothing -> pure $ ErrorResponse "Invalid game action"
                                 Just (res, gs') -> do
-                                    writeTVar svar (servState & instances . ix gameKey . runningGame . gameState .~ gs')
-                                    pure $ OkResponse (toJSON ())
+                                    case res of
+                                        Nothing -> do
+                                            writeTVar svar (servState & instances . ix gameKey . runningGame . gameState .~ gs')
+                                            pure $ OkResponse (toJSON ())
+                                        Just winners -> do
+                                            writeTVar svar (servState & instances . at gameKey .~ Just (
+                                                CompletedInstance
+                                                    { _playerKeys = instKeys
+                                                    , _completedGame = instRG { _gameState = gs' }
+                                                    , _result = winners
+                                                    }))
+                                            pure $ OkResponse (toJSON ())
         NewLobby pInfo -> do
             servState <- atomically $ readTVar svar
             if any (\lob -> lob^.ownerKey == req^.playerKey) (servState^.instances)
