@@ -685,6 +685,9 @@ derive instance genericInstanceState :: Generic InstanceState
 instance showInstanceState :: Show InstanceState where
     show = gShow
 
+instance eqInstanceState :: Eq InstanceState where
+    eq = gEq
+
 instance decodeInstanceState :: DecodeJson InstanceState where
     decodeJson json = do
         str <- decodeJson json

@@ -309,3 +309,27 @@ table {
 .currentVP {
     text-align: center;
 }
+
+.instanceSummary {
+    display: flex;
+    align-items: center;
+    padding: 3px;
+    border: 1px solid black;
+    margin: 2px;
+}
+
+.instanceState {
+    margin-left: 3px;
+    margin-right: 50px;
+    font-size: 20px;
+}
+
+.instancePlayers {
+    display: flex;
+}
+
+.instancePlayer {
+    padding: 3px;
+    margin: 2px;
+    border: 1px solid black;
+}

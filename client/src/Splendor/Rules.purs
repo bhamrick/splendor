@@ -65,9 +65,10 @@ isLegalAction (GameView gv) act =
                                             (\color ->
                                                 let
                                                 numBasics = fromMaybe 0 (Map.lookup (Basic color) ps.heldChips)
+                                                numCards = fromMaybe 0 (Map.lookup color ps.ownedCardCounts)
                                                 colorCost = fromMaybe 0 (Map.lookup color c.cost)
                                                 in
-                                                max 0 (colorCost - numBasics)
+                                                max 0 (colorCost - numBasics - numCards)
                                             ) [Red, Green, Blue, White, Black]
                                         in
                                         fromMaybe 0 (Map.lookup Gold ps.heldChips) >= requiredGold

@@ -179,23 +179,10 @@ render dispatch p state _ =
             case state.currentLobbyKey of
                 Nothing ->
                     [ R.div'
-                        [ R.p'
-                            [ R.text "Client Key: "
-                            , R.text $ state.clientKey
-                            ]
-                        , R.div' $ (view T._render pInfoSpec) (dispatch <<< OnPlayerInfo)  p state []
-                        , R.div' $ foldMap (\(Tuple lobbyKey lobbyView) ->
-                            [ R.div' $
-                                [ R.text "Lobby: "
-                                , R.text lobbyKey
-                                , R.text $ gShow lobbyView
-                                , R.button
-                                    [ RP.onClick \_ -> dispatch (JoinLobbyAction lobbyKey)
-                                    ]
-                                    [ R.text "Join"
-                                    ]
-                                ]
-                            ]) (StrMap.toList state.instanceList)
+                        [ R.div' $ (view T._render pInfoSpec) (dispatch <<< OnPlayerInfo)  p state []
+                        , R.div
+                            [ RP.className "instanceList" ]
+                            (renderInstanceList dispatch [] state.instanceList [])
                         , R.button
                             [ RP.onClick \_ -> dispatch NewLobbyAction
                             ]
@@ -241,7 +228,11 @@ render dispatch p state _ =
                         (renderGameView state.currentSelection dispatch p (riv.runningGame) [])
                     ]
                 CompletedInstanceView civ ->
-                    [ R.text "Completed game placeholder" ]
+                    [ R.div
+                        [ RP.className "gameView"
+                        ]
+                        (renderCompletedGame civ.result dispatch [] civ.completedGame [])
+                    ]
 
 renderGameView :: Maybe ActionSelection -> T.Render (RunningGame GameView) _ _
 renderGameView selection dispatch p (RunningGame rg) _ =
@@ -258,23 +249,25 @@ renderGameView selection dispatch p (RunningGame rg) _ =
                     , R.table
                         [ RP.className "boardSupply" ]
                         [ R.tbody []
-                            [ R.td []
-                                [ R.table []
-                                    [ R.tbody []
-                                        [ R.tr
-                                            [ RP.className "availableChips" ]
-                                            (renderAvailableChips selection dispatch p gv.availableChips [])
-                                        , R.tr
-                                            [ RP.className "discardChips" ]
-                                            (renderDiscardChips selection dispatch p unit [])
+                            [ R.tr []
+                                [ R.td []
+                                    [ R.table []
+                                        [ R.tbody []
+                                            [ R.tr
+                                                [ RP.className "availableChips" ]
+                                                (renderAvailableChips selection dispatch p gv.availableChips [])
+                                            , R.tr
+                                                [ RP.className "discardChips" ]
+                                                (renderDiscardChips selection dispatch p unit [])
+                                            ]
                                         ]
                                     ]
+                                , R.td
+                                    [ RP.className "actionArea" ]
+                                    (renderActionButtons selection dispatch p (GameView gv) [])
                                 ]
-                            , R.td
-                                [ RP.className "actionArea" ]
-                                (renderActionButtons selection dispatch p (GameView gv) [])
                             ]
-                        ]
+                            ]
                     , R.div [ RP.className "availableNobles" ]
                         (renderAvailableNobles selection dispatch p gv.availableNobles [])
                     , R.div
@@ -313,6 +306,120 @@ renderGameView selection dispatch p (RunningGame rg) _ =
                     ]
                 ]
             ]
+
+renderCompletedGame :: GameResult -> T.Render (RunningGame GameState) _ _
+renderCompletedGame (GameWinners winners) dispatch p (RunningGame rg) _ =
+    case rg.gameState of
+        GameState gs ->
+            [ R.div
+                [ RP.className "wrapper" ]
+                [ R.div
+                    [ RP.className "board" ]
+                    [ R.div
+                        [ RP.className "winnersText" ]
+                        [ R.text (String.joinWith " and " (map (\idx ->
+                            case Map.lookup idx rg.players of
+                                Nothing -> "Player " <> show idx
+                                Just (PlayerInfo pi) -> pi.displayName
+                            ) winners) <> " won.")
+                        , R.button
+                            [ RP.onClick \_ -> dispatch LeaveLobbyAction
+                            ]
+                            [ R.text "Leave" ]
+                        ]
+                    , R.table
+                        [ RP.className "boardSupply" ]
+                        [ R.tbody []
+                            [ R.tr []
+                                [ R.td []
+                                    [ R.table []
+                                        [ R.tbody []
+                                            [ R.tr
+                                                [ RP.className "availableChips" ]
+                                                (renderAvailableChips Nothing dispatch p gs.availableChips [])
+                                            , R.tr
+                                                [ RP.className "discardChips" ]
+                                                (renderDiscardChips Nothing dispatch p unit [])
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    , R.div
+                        [ RP.className "availableNobles" ]
+                        (renderAvailableNobles Nothing dispatch p gs.availableNobles [])
+                    , R.div
+                        [ RP.className "tierView" ]
+                        (renderTierView Nothing 3 dispatch p (viewTier gs.tier3State) [])
+                    , R.div
+                        [ RP.className "tierView" ]
+                        (renderTierView Nothing 2 dispatch p (viewTier gs.tier2State) [])
+                    , R.div
+                        [ RP.className "tierView" ]
+                        (renderTierView Nothing 1 dispatch p (viewTier gs.tier1State) [])
+                    ]
+                , R.div
+                    [ RP.className "players" ]
+                    [ R.table
+                        [ RP.className "playerBoards" ]
+                        [ R.tbody []
+                            (Array.zipWith (\idx player ->
+                                R.tr
+                                    [ RP.className "playerRow" ]
+                                    ([ R.td
+                                        [ RP.className "playerName" ]
+                                        [ R.text (fromMaybe ("Player " <> show idx) ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup idx rg.players))
+                                        ]
+                                    ] <> renderPlayerState Nothing dispatch p player [])
+                            ) (Array.range 0 (Array.length gs.playerStates - 1)) gs.playerStates)
+                        ]
+                    ]
+                ]
+            ]
+    where
+    viewTier (TierState ts) =
+        TierView
+            { availableCards: ts.availableCards
+            , deckCount: Array.length ts.tierDeck
+            }
+
+renderInstanceList :: T.Render (StrMap InstanceSummary) _ _
+renderInstanceList dispatch _ insts _ =
+    foldMap subrender (List.filter (\(Tuple _ (InstanceSummary is)) -> is.state == Waiting) instList)
+    <> foldMap subrender (List.filter (\(Tuple _ (InstanceSummary is)) -> is.state == Running) instList)
+    <> foldMap subrender (List.filter (\(Tuple _ (InstanceSummary is)) -> is.state == Completed) instList)
+    where
+    subrender instanceData = renderInstanceSummary dispatch [] instanceData []
+    instList = StrMap.toList insts
+
+renderInstanceSummary :: T.Render (Tuple String InstanceSummary) _ _
+renderInstanceSummary dispatch _ (Tuple instKey (InstanceSummary is)) _ =
+    [ R.div
+        [ RP.className "instanceSummary" ]
+        [ R.div
+            [ RP.className "instanceState" ]
+            [ R.text (case is.state of
+                Waiting -> "Waiting"
+                Running -> "Running"
+                Completed -> "Completed"
+            ) ]
+        , R.div
+            [ RP.className "instancePlayers" ]
+            (map (\(PlayerInfo pi) ->
+                R.div
+                    [ RP.className "instancePlayer" ]
+                    [ R.text pi.displayName ]
+                ) is.players
+            )
+        , R.div
+            [ RP.className "instanceActions" ]
+            [ R.button
+                [ RP.onClick \_ -> dispatch (JoinLobbyAction instKey) ]
+                [ R.text "Join" ]
+            ]
+        ]
+    ]
 
 actionRequestText :: ActionRequest -> Map Int PlayerInfo -> String
 actionRequestText (ActionRequest ar) players =
@@ -752,8 +859,9 @@ performAction a p s =
             void $ T.cotransform (\state -> state { currentSelection = Nothing })
         SelectChip color -> do
             case s.currentInstance of
-                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { currentRequest: ActionRequest ar } } }) ->
-                    case ar.type_ of
+                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { playerPosition: idx, currentRequest: ActionRequest ar } } }) ->
+                    if ar.player == idx
+                    then case ar.type_ of
                         TurnRequest ->
                             case s.currentSelection of
                                 Just (TakeChipsSelection selectedColors) ->
@@ -765,52 +873,62 @@ performAction a p s =
                                 _ -> do
                                     void $ T.cotransform (\state -> state { currentSelection = Just $ TakeChipsSelection [color] })
                         _ -> pure unit
+                    else pure unit
                 _ -> pure unit
         SelectCard cardId -> do
             case s.currentInstance of
-                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { currentRequest: ActionRequest ar } } }) ->
-                    case ar.type_ of
+                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { playerPosition: idx, currentRequest: ActionRequest ar } } }) ->
+                    if ar.player == idx
+                    then case ar.type_ of
                         TurnRequest ->
                             if s.currentSelection == Just (CardSelection cardId)
                                 then void $ T.cotransform (\state -> state { currentSelection = Nothing })
                                 else void $ T.cotransform (\state -> state { currentSelection = Just $ CardSelection cardId })
                         _ -> pure unit
+                    else pure unit
                 _ -> pure unit
         SelectTopDeck tier -> do
             case s.currentInstance of
-                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { currentRequest: ActionRequest ar } } }) ->
-                    case ar.type_ of
+                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { playerPosition: idx, currentRequest: ActionRequest ar } } }) ->
+                    if ar.player == idx
+                    then case ar.type_ of
                         TurnRequest ->
                             if s.currentSelection == Just (TopDeckSelection tier)
                                 then void $ T.cotransform (\state -> state { currentSelection = Nothing })
                                 else void $ T.cotransform (\state -> state { currentSelection = Just $ TopDeckSelection tier })
                         _ -> pure unit
+                    else pure unit
                 _ -> pure unit
         SelectAvailableNoble nid -> do
             case s.currentInstance of
-                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { currentRequest: ActionRequest ar } } }) ->
-                    case ar.type_ of
+                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { playerPosition: idx, currentRequest: ActionRequest ar } } }) ->
+                    if ar.player == idx
+                    then case ar.type_ of
                         SelectNobleRequest ->
                             if s.currentSelection == Just (NobleSelection nid)
                                 then void $ T.cotransform (\state -> state { currentSelection = Nothing })
                                 else void $ T.cotransform (\state -> state { currentSelection = Just (NobleSelection nid) })
                         _ -> pure unit
+                    else pure unit
                 _ -> pure unit
         AddToDiscard ctype -> do
             case s.currentInstance of
-                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { currentRequest: ActionRequest ar } } }) ->
-                    case ar.type_ of
+                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { playerPosition: idx, currentRequest: ActionRequest ar } } }) ->
+                    if ar.player == idx
+                    then case ar.type_ of
                         DiscardChipRequest _ ->
                             case s.currentSelection of
                                 Just (DiscardSelection chips) -> do
                                     void $ T.cotransform (\state -> state { currentSelection = Just (DiscardSelection (Map.alter (\n -> Just $ 1 + fromMaybe 0 n) ctype chips)) })
                                 _ -> void $ T.cotransform (\state -> state { currentSelection = Just (DiscardSelection (Map.singleton ctype 1)) })
                         _ -> pure unit
+                    else pure unit
                 _ -> pure unit
         RemoveFromDiscard ctype -> do
             case s.currentInstance of
-                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { currentRequest: ActionRequest ar } } }) ->
-                    case ar.type_ of
+                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { playerPosition: idx, currentRequest: ActionRequest ar } } }) ->
+                    if ar.player == idx
+                    then case ar.type_ of
                         DiscardChipRequest _ ->
                             case s.currentSelection of
                                 Just (DiscardSelection chips) -> do
@@ -820,6 +938,7 @@ performAction a p s =
                                         else state)
                                 _ -> pure unit
                         _ -> pure unit
+                    else pure unit
                 _ -> pure unit
         DoGameAction action -> do
             case s.currentLobbyKey of
