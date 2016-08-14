@@ -19,7 +19,7 @@ executable splendor
   main-is:          Server/Main.hs
   -- other-modules:       
   -- other-extensions:    
-  build-depends:       base >=4.8 && <4.9
+  build-depends:       base >=4.8 && <5.0
                      , aeson >=0.11
                      , base64-bytestring >=1.0
                      , bytestring >=0.10

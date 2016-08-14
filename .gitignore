@@ -3,3 +3,4 @@ dist/
 client/output/
 client/bower_components/
 client/client.js
+.stack-work/
