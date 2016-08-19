@@ -2,10 +2,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Lens
-import Control.Monad (guard)
+import Control.Monad (forever, guard, when)
 import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
@@ -13,6 +14,7 @@ import qualified Data.ByteString.Lazy
 import Data.Foldable
 import qualified Data.Map as Map
 import Data.String
+import Data.Time.Clock
 import System.FilePath
 import System.IO.Error
 import System.Random.Shuffle
@@ -21,7 +23,7 @@ import Network.HTTP.Types
 import Network.Wai
 import Network.Wai.Handler.Warp
 
-import Lucid
+import Lucid hiding (for_)
 
 import Splendor.Types
 import Splendor.Rules
@@ -30,6 +32,7 @@ import Server.Types
 
 work :: TVar ServerState -> ServerRequest RequestData -> IO ServerResponse
 work svar req = do
+    curTime <- getCurrentTime
     case req^.requestData of
         GameAction gameKey act -> atomically $ do
             servState <- readTVar svar
@@ -46,7 +49,10 @@ work svar req = do
                                 Just (res, gs') -> do
                                     case res of
                                         Nothing -> do
-                                            writeTVar svar (servState & instances . ix gameKey . runningGame . gameState .~ gs')
+                                            writeTVar svar (servState
+                                                & instances . ix gameKey . runningGame . gameState .~ gs'
+                                                & instances . ix gameKey . lastUpdated .~ curTime
+                                                )
                                             pure $ OkResponse (toJSON ())
                                         Just winners -> do
                                             writeTVar svar (servState & instances . at gameKey .~ Just (
@@ -54,6 +60,7 @@ work svar req = do
                                                     { _playerKeys = instKeys
                                                     , _completedGame = instRG { _gameState = gs' }
                                                     , _result = winners
+                                                    , _lastUpdated = curTime
                                                     }))
                                             pure $ OkResponse (toJSON ())
         NewLobby pInfo -> do
@@ -68,6 +75,7 @@ work svar req = do
                         instances . at newInstanceId .~ Just (WaitingInstance
                             { _waitingPlayers = [(req^.playerKey, pInfo)]
                             , _ownerKey = req^.playerKey
+                            , _lastUpdated = curTime
                             })
                 pure $ OkResponse (toJSON newInstanceId)
         JoinLobby lobbyKey pInfo -> do
@@ -87,6 +95,7 @@ work svar req = do
                         Just (inst@(WaitingInstance
                               { _waitingPlayers = players
                               , _ownerKey = owner
+                              , _lastUpdated = curTime
                               })) ->
                             if owner == req^.playerKey
                             then Nothing
@@ -124,6 +133,7 @@ work svar req = do
                                             , _version = 0
                                             , _gameState = gs
                                             }
+                                        , _lastUpdated = curTime
                                         }
                                 modifyTVar svar $ \servState -> servState
                                     & instances . at instanceKey .~ Just inst
@@ -134,6 +144,17 @@ work svar req = do
                     pure $ ErrorResponse "Game already started"
                 Nothing ->
                     pure $ ErrorResponse "No such game"
+
+culler :: TVar ServerState -> IO ()
+culler svar = forever $ do
+    curTime <- getCurrentTime
+    servState <- readTVarIO svar
+    for_ (Map.toList $ servState^.instances) $ \(instKey, inst) -> do
+        let updatedTime = inst^.lastUpdated        
+        when (diffUTCTime curTime updatedTime > 3600) $ do
+            atomically $ do
+                modifyTVar svar $ instances.at instKey .~ Nothing
+    threadDelay (60*10^6)
 
 addPlayer :: String -> PlayerInfo -> [(String, PlayerInfo)] -> [(String, PlayerInfo)]
 addPlayer key pinfo players =
@@ -227,6 +248,7 @@ serverApplication = do
     svar <- newTVarIO $ ServerState
         { _instances = Map.empty
         }
+    forkIO $ culler svar
     pure $ \request -> do
         if requestMethod request == methodGet
         then do

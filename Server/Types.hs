@@ -10,6 +10,7 @@ import Data.ByteString (ByteString)
 import Data.Map (Map, mapKeys)
 import qualified Data.Map as Map
 import Data.Text (Text)
+import Data.Time.Clock
 import Data.Traversable
 import GHC.Generics
 import Text.Read
@@ -52,15 +53,18 @@ data Instance
     = WaitingInstance
         { _waitingPlayers :: [(String, PlayerInfo)]
         , _ownerKey :: String
+        , _lastUpdated :: UTCTime
         }
     | RunningInstance
         { _playerKeys :: Map String Int
         , _runningGame :: RunningGame GameState
+        , _lastUpdated :: UTCTime
         }
     | CompletedInstance
         { _playerKeys :: Map String Int
         , _completedGame :: RunningGame GameState
         , _result :: GameResult
+        , _lastUpdated :: UTCTime
         }
     deriving (Eq, Show, Ord, Generic)
 
