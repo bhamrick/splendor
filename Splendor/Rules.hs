@@ -22,6 +22,9 @@ illegal = lift Nothing
 withDefault :: a -> (a -> b) -> Maybe a -> Maybe b
 withDefault def f = Just . f . fromMaybe def
 
+append :: a -> [a] -> [a]
+append x l = l ++ [x]
+
 runAction :: Int -> Action -> GameState -> Maybe (Maybe GameResult, GameState)
 runAction idx a =
     runStateT $ do
@@ -38,6 +41,7 @@ runAction idx a =
                                 filter
                                     (\c -> fromMaybe 0 (Map.lookup (Basic c) chipSupply) > 0)
                                     [Red, Green, Blue, White, Black]
+                        actionLog %= append (idx, Took3 colorSet)
                         if length colorSet < 3 && length colorSet /= length availableColorSet
                         then illegal
                         else do
@@ -66,6 +70,7 @@ runAction idx a =
                                             , _requestType = TurnRequest
                                             }
                     Take2 c -> do
+                        actionLog %= append (idx, Took2 c)
                         chipSupply <- use availableChips
                         let colorSupply = fromMaybe 0 (Map.lookup (Basic c) chipSupply)
                         if colorSupply >= 4
@@ -100,6 +105,7 @@ runAction idx a =
                         if | any (\c -> c^.cardId == cid) tier1Cards -> do
                                 case filter (\c -> c^.cardId == cid) tier1Cards of
                                     [card] -> do
+                                        actionLog %= append (idx, Reserved card)
                                         playerStates . ix curTurn . reservedCards %= (card:)
                                         when (goldAvailable > 0) $ do
                                             playerStates . ix curTurn . heldChips . at Gold %= withDefault 0 (+1)
@@ -115,6 +121,7 @@ runAction idx a =
                            | any (\c -> c^.cardId == cid) tier2Cards -> do
                                 case filter (\c -> c^.cardId == cid) tier2Cards of
                                     [card] -> do
+                                        actionLog %= append (idx, Reserved card)
                                         playerStates . ix curTurn . reservedCards %= (card:)
                                         when (goldAvailable > 0) $ do
                                             playerStates . ix curTurn . heldChips . at Gold %= withDefault 0 (+1)
@@ -130,6 +137,7 @@ runAction idx a =
                            | any (\c -> c^.cardId == cid) tier3Cards -> do
                                 case filter (\c -> c^.cardId == cid) tier3Cards of
                                     [card] -> do
+                                        actionLog %= append (idx, Reserved card)
                                         playerStates . ix curTurn . reservedCards %= (card:)
                                         when (goldAvailable > 0) $ do
                                             playerStates . ix curTurn . heldChips . at Gold %= withDefault 0 (+1)
@@ -161,6 +169,7 @@ runAction idx a =
                                         , _requestType = TurnRequest
                                         }
                     ReserveTop tier -> do
+                        actionLog %= append (idx, ReservedTop tier)
                         alreadyReserved <- use (playerStates . ix curTurn . reservedCards)
                         when (length alreadyReserved >= 3) illegal
                         availableGold <- fromMaybe 0 <$> use (availableChips . at Gold)
@@ -221,6 +230,7 @@ runAction idx a =
                         if | any (\c -> c^.cardId == cid) tier1Cards -> do
                                 case filter (\c -> c^.cardId == cid) tier1Cards of
                                     [card] -> do
+                                        actionLog %= append (idx, Bought card)
                                         tier1State . availableCards %= filter (\c -> c^.cardId /= cid)
                                         for_ (Map.toList (card^.cardCost)) $ \(color, n) -> do
                                             numBasics <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . heldChips . ix (Basic color))
@@ -250,6 +260,7 @@ runAction idx a =
                            | any (\c -> c^.cardId == cid) tier2Cards -> do
                                 case filter (\c -> c^.cardId == cid) tier2Cards of
                                     [card] -> do
+                                        actionLog %= append (idx, Bought card)
                                         tier2State . availableCards %= filter (\c -> c^.cardId /= cid)
                                         for_ (Map.toList (card^.cardCost)) $ \(color, n) -> do
                                             numBasics <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . heldChips . ix (Basic color))
@@ -279,6 +290,7 @@ runAction idx a =
                            | any (\c -> c^.cardId == cid) tier3Cards -> do
                                 case filter (\c -> c^.cardId == cid) tier3Cards of
                                     [card] -> do
+                                        actionLog %= append (idx, Bought card)
                                         tier3State . availableCards %= filter (\c -> c^.cardId /= cid)
                                         for_ (Map.toList (card^.cardCost)) $ \(color, n) -> do
                                             numBasics <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . heldChips . ix (Basic color))
@@ -308,6 +320,7 @@ runAction idx a =
                            | any (\c -> c^.cardId == cid) resCards -> do
                                 case filter (\c -> c^.cardId == cid) resCards of
                                     [card] -> do
+                                        actionLog %= append (idx, Bought card)
                                         for_ (Map.toList (card^.cardCost)) $ \(color, n) -> do
                                             numBasics <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . heldChips . ix (Basic color))
                                             numCards <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . ownedCardCounts . ix color)
@@ -346,6 +359,7 @@ runAction idx a =
                                     , _requestType = TurnRequest
                                     }
                             [noble] -> do
+                                actionLog %= append (idx, GainedNoble noble)
                                 availableNobles %= filter (/= noble)
                                 playerStates . ix curTurn . ownedNobles %= (noble:)
                                 playerStates . ix curTurn . currentVP += (noble^.noblePoints)
@@ -364,6 +378,7 @@ runAction idx a =
                 case a of
                     Discard cmap -> do
                         when (sum cmap /= n) illegal
+                        actionLog %= append (idx, Discarded cmap)
                         for_ (Map.toList cmap) $ \(cType, k) -> do
                             playerStates . ix curTurn . heldChips . at cType %= withDefault 0 (subtract k)
                             availableChips . at cType %= withDefault 0 (+k)
@@ -382,6 +397,7 @@ runAction idx a =
                         let matchingNobles = filter (\n -> n^.nobleId == nid) boardNobles
                         case matchingNobles of
                             [noble] -> do
+                                actionLog %= append (idx, GainedNoble noble)
                                 availableNobles %= filter (/= noble)
                                 playerStates . ix curTurn . ownedNobles %= (noble:)
                                 playerStates . ix curTurn . currentVP += (noble^.noblePoints)
@@ -480,6 +496,7 @@ initState n = do
                 { _requestPlayer = 0
                 , _requestType = TurnRequest
                 }
+            , _actionLog = []
             }
 
 viewPlayer :: PlayerState -> PlayerView
@@ -513,4 +530,5 @@ viewGame pos g =
         , _gvTier2View = viewTier (g^.tier2State)
         , _gvTier3View = viewTier (g^.tier3State)
         , _gvCurrentRequest = g^.currentRequest
+        , _gvActionLog = g^.actionLog
         }

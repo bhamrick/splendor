@@ -267,6 +267,70 @@ instance encodeJsonAction :: EncodeJson Action where
                 ~> "contents" := nId
                 ~> jsonEmptyObject
 
+data ActionSummary
+    = Took3 (Array Color)
+    | Took2 Color
+    | Reserved Card
+    | ReservedTop Int
+    | Bought Card
+    | Discarded (Map ChipType Int)
+    | GainedNoble Noble
+
+instance decodeJsonActionSummary :: DecodeJson ActionSummary where
+    decodeJson j = do
+        obj <- decodeJson j
+        tag <- obj .? "tag"
+        case tag of
+            "Took3" -> do
+                Took3 <$> obj .? "contents"
+            "Took2" -> do
+                Took2 <$> obj .? "contents"
+            "Reserved" -> do
+                Reserved <$> obj .? "contents"
+            "ReservedTop" -> do
+                ReservedTop <$> obj .? "contents"
+            "Bought" -> do
+                Bought <$> obj .? "contents"
+            "Discarded" -> do
+                cMapJson <- obj .? "contents"
+                cMap <- mapFromJson cMapJson
+                pure $ Discarded cMap
+            "GainedNoble" -> do
+                GainedNoble <$> obj .? "contents"
+            _ -> Left "Invalid ActionSummary tag"
+
+instance encodeJsonActionSummary :: EncodeJson ActionSummary where
+    encodeJson as =
+        case as of
+            Took3 colors ->
+                "tag" := "Took3"
+                ~> "contents" := colors
+                ~> jsonEmptyObject
+            Took2 color ->
+                "tag" := "Took2"
+                ~> "contents" := color
+                ~> jsonEmptyObject
+            Reserved c ->
+                "tag" := "Reserved"
+                ~> "contents" := c
+                ~> jsonEmptyObject
+            ReservedTop t ->
+                "tag" := "ReservedTop"
+                ~> "contents" := t
+                ~> jsonEmptyObject
+            Bought c ->
+                "tag" := "Bought"
+                ~> "contents" := c
+                ~> jsonEmptyObject
+            Discarded chips ->
+                "tag" := "Discarded"
+                ~> "contents" := mapToJson chips
+                ~> jsonEmptyObject
+            GainedNoble n ->
+                "tag" := "GainedNoble"
+                ~> "contents" := n
+                ~> jsonEmptyObject
+
 newtype Card = Card
     { id :: CardId
     , color :: Color
@@ -517,6 +581,7 @@ newtype GameState = GameState
     , tier2State :: TierState
     , tier3State :: TierState
     , currentRequest :: ActionRequest
+    , actionLog :: Array (Tuple Int ActionSummary)
     }
 
 instance decodeJsonGameState :: DecodeJson GameState where
@@ -531,6 +596,7 @@ instance decodeJsonGameState :: DecodeJson GameState where
         tier2State <- obj .? "_tier2State"
         tier3State <- obj .? "_tier3State"
         currentRequest <- obj .? "_currentRequest"
+        actionLog <- obj .? "_actionLog"
         pure $ GameState
             { numPlayers: numPlayers
             , playerStates: playerStates
@@ -540,6 +606,7 @@ instance decodeJsonGameState :: DecodeJson GameState where
             , tier2State: tier2State
             , tier3State: tier3State
             , currentRequest: currentRequest
+            , actionLog: actionLog
             }
 
 instance encodeJsonGameState :: EncodeJson GameState where
@@ -552,6 +619,7 @@ instance encodeJsonGameState :: EncodeJson GameState where
         ~> "_tier2State" := gs.tier2State
         ~> "_tier3State" := gs.tier3State
         ~> "_currentRequest" := gs.currentRequest
+        ~> "_actionLog" := gs.actionLog
         ~> jsonEmptyObject
 
 newtype GameView = GameView
@@ -565,6 +633,7 @@ newtype GameView = GameView
     , tier2View :: TierView
     , tier3View :: TierView
     , currentRequest :: ActionRequest
+    , actionLog :: Array (Tuple Int ActionSummary)
     }
 
 instance decodeJsonGameView :: DecodeJson GameView where
@@ -581,6 +650,7 @@ instance decodeJsonGameView :: DecodeJson GameView where
         tier2View <- obj .? "_gvTier2View"
         tier3View <- obj .? "_gvTier3View"
         currentRequest <- obj .? "_gvCurrentRequest"
+        actionLog <- obj .? "_gvActionLog"
         pure $ GameView
             { numPlayers: numPlayers
             , playerPosition: playerPosition
@@ -592,6 +662,7 @@ instance decodeJsonGameView :: DecodeJson GameView where
             , tier2View: tier2View
             , tier3View: tier3View
             , currentRequest: currentRequest
+            , actionLog: actionLog
             }
 
 instance encodeJsonGameView :: EncodeJson GameView where
@@ -606,6 +677,7 @@ instance encodeJsonGameView :: EncodeJson GameView where
         ~> "_gvTier2View" := gv.tier2View
         ~> "_gvTier3View" := gv.tier3View
         ~> "_gvCurrentRequest" := gv.currentRequest
+        ~> "_gvActionLog" := gv.actionLog
         ~> jsonEmptyObject
 
 data GameResult

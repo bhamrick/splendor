@@ -84,6 +84,19 @@ data Action
 instance ToJSON Action
 instance FromJSON Action
 
+data ActionSummary
+    = Took3 [Color]
+    | Took2 Color
+    | Reserved Card
+    | ReservedTop Int
+    | Bought Card
+    | Discarded (Map ChipType Int)
+    | GainedNoble Noble
+    deriving (Eq, Show, Ord, Generic)
+
+instance ToJSON ActionSummary
+instance FromJSON ActionSummary
+
 data Card
     = Card
         { _cardId :: CardId
@@ -184,6 +197,7 @@ data GameState
         , _tier2State :: TierState
         , _tier3State :: TierState
         , _currentRequest :: ActionRequest
+        , _actionLog :: [(Int, ActionSummary)]
         }
     deriving (Eq, Show, Ord, Generic)
 
@@ -209,6 +223,7 @@ data GameView
         , _gvTier2View :: TierView
         , _gvTier3View :: TierView
         , _gvCurrentRequest :: ActionRequest
+        , _gvActionLog :: [(Int, ActionSummary)]
         }
     deriving (Eq, Show, Ord, Generic)
 

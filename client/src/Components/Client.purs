@@ -305,7 +305,71 @@ renderGameView selection dispatch p (RunningGame rg) _ =
                         ]
                     ]
                 ]
+            , R.div
+                [ RP.className "actionLogWrapper" ]
+                [ R.textarea
+                    [ RP.className "actionLog"
+                    , RP.value $
+                        String.joinWith "\n" $
+                            map (\(Tuple idx action) ->
+                                (case Map.lookup idx rg.players of
+                                    Just (PlayerInfo pi) -> pi.displayName
+                                    _ -> "Player " <> show idx
+                                ) <> " " <> actionSummaryLine action
+                            ) (Array.reverse gv.actionLog)
+                    , RP.readOnly "true"
+                    ]
+                    []
+                ]
             ]
+
+actionSummaryLine :: ActionSummary -> String
+actionSummaryLine action =
+    case action of
+        Took3 colors ->
+            "took chips: " <> (String.joinWith ", " (map colorString colors))
+        Took2 color ->
+            "took two " <> colorString color <> " chips."
+        Reserved card ->
+            "reserved a card: " <> cardString card
+        ReservedTop tier ->
+            "reserved the top tier " <> show tier <> " card."
+        Bought card ->
+            "bought a card: " <> cardString card
+        Discarded chips ->
+            "discarded chips: " <> chipMapString chips
+        GainedNoble noble ->
+            "gained the noble " <> nobleString noble
+    where
+    colorString color =
+        case color of
+            Red -> "red"
+            Green -> "green"
+            White -> "white"
+            Black -> "black"
+            Blue -> "blue"
+    chipString ctype =
+        case ctype of
+            Basic color -> colorString color
+            Gold -> "gold"
+    cardString (Card c) =
+        show c.points <> " point "
+        <> colorString c.color
+        <> " costing "
+        <> colorMapString c.cost
+    nobleString (Noble n) =
+        "requiring "
+        <> colorMapString n.requirement
+    colorMapString colors =
+        String.joinWith ", " <<< Array.fromFoldable $
+            map (\(Tuple color n) ->
+                show n <> " " <> colorString color
+            ) (Map.toList colors)
+    chipMapString chips =
+        String.joinWith ", " <<< Array.fromFoldable $
+            map (\(Tuple chip n) ->
+                show n <> " " <> chipString chip
+            ) (Map.toList chips)
 
 renderCompletedGame :: GameResult -> T.Render (RunningGame GameState) _ _
 renderCompletedGame (GameWinners winners) dispatch p (RunningGame rg) _ =

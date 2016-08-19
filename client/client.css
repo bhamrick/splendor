@@ -333,3 +333,23 @@ table {
     margin: 2px;
     border: 1px solid black;
 }
+
+.actionLogWrapper {
+    display: flex;
+    justify-content: center;
+}
+
+.actionLog {
+    width: 50em;
+    height: 10em;
+    resize: none;
+    outline: none;
+    border: none;
+}
+
+.actionLog:focus {
+    outline: none;
+    -webkit-box-shadow: none;
+    -moz-box-shadow: none;
+    box-shadow: none;
+}
