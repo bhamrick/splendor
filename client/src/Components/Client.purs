@@ -440,6 +440,22 @@ renderCompletedGame (GameWinners winners) dispatch p (RunningGame rg) _ =
                         ]
                     ]
                 ]
+            , R.div
+                [ RP.className "actionLogWrapper" ]
+                [ R.textarea
+                    [ RP.className "actionLog"
+                    , RP.value $
+                        String.joinWith "\n" $
+                            map (\(Tuple idx action) ->
+                                (case Map.lookup idx rg.players of
+                                    Just (PlayerInfo pi) -> pi.displayName
+                                    _ -> "Player " <> show idx
+                                ) <> " " <> actionSummaryLine action
+                            ) (Array.reverse gs.actionLog)
+                    , RP.readOnly "true"
+                    ]
+                    []
+                ]
             ]
     where
     viewTier (TierState ts) =
