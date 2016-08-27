@@ -259,6 +259,7 @@ serverApplication = do
                 [] -> pure $ responseLBS status200 [("Content-Type", "text/html")] (renderBS mainPage)
                 ["client.js"] -> serveFile "client/client.js" request
                 ["client.css"] -> serveFile "client/client.css" request
+                "games":_ -> archiveR request
                 _ -> pure $ responseLBS status404 [("Content-Type", "application/json")] "[]"
         else do
             bod <- lazyRequestBody request
