@@ -16,14 +16,20 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 executable splendor
-  main-is:          Server/Main.hs
-  -- other-modules:       
+  main-is:             Server/Main.hs
+  other-modules:       Server.Types
+                     , Server.Identifier
+                     , Server.GameLogs
+                     , Splendor.Types
+                     , Splendor.Rules
+                     , Splendor.Data
   -- other-extensions:    
   build-depends:       base >=4.8 && <5.0
                      , aeson >=0.11
                      , base64-bytestring >=1.0
                      , bytestring >=0.10
                      , containers >=0.5
+                     , directory >=1.2
                      , filepath >=1.4
                      , http-types >=0.9
                      , lens >=4.14

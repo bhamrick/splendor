@@ -27,6 +27,7 @@ import Lucid hiding (for_)
 
 import Splendor.Types
 import Splendor.Rules
+import Server.GameLogs
 import Server.Identifier
 import Server.Types
 
@@ -34,8 +35,8 @@ work :: TVar ServerState -> ServerRequest RequestData -> IO ServerResponse
 work svar req = do
     curTime <- getCurrentTime
     case req^.requestData of
-        GameAction gameKey act -> atomically $ do
-            servState <- readTVar svar
+        GameAction gameKey act -> do
+            servState <- readTVarIO svar
             case Map.lookup gameKey (servState^.instances) of
                 Nothing -> pure $ ErrorResponse "No such game"
                 Just (WaitingInstance {}) -> pure $ ErrorResponse "Game isn't started"
@@ -49,19 +50,21 @@ work svar req = do
                                 Just (res, gs') -> do
                                     case res of
                                         Nothing -> do
-                                            writeTVar svar (servState
+                                            atomically $ modifyTVar svar (\servState -> servState
                                                 & instances . ix gameKey . runningGame . gameState .~ gs'
                                                 & instances . ix gameKey . lastUpdated .~ curTime
                                                 )
                                             pure $ OkResponse (toJSON ())
                                         Just winners -> do
-                                            writeTVar svar (servState & instances . at gameKey .~ Just (
-                                                CompletedInstance
+                                            let completeGame = instRG { _gameState = gs' }
+                                            atomically . modifyTVar svar $
+                                                instances . at gameKey .~ Just (CompletedInstance
                                                     { _playerKeys = instKeys
-                                                    , _completedGame = instRG { _gameState = gs' }
+                                                    , _completedGame = completeGame
                                                     , _result = winners
                                                     , _lastUpdated = curTime
-                                                    }))
+                                                    })
+                                            writeGame gameKey completeGame winners curTime
                                             pure $ OkResponse (toJSON ())
         NewLobby pInfo -> do
             servState <- atomically $ readTVar svar

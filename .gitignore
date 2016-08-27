@@ -1,4 +1,5 @@
 dist/
+games/
 .cabal-sandbox/
 client/output/
 client/bower_components/
