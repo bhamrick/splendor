@@ -14,6 +14,7 @@ import qualified Data.ByteString.Lazy
 import Data.Foldable
 import qualified Data.Map as Map
 import Data.String
+import qualified Data.Text as Text
 import Data.Time.Clock
 import System.FilePath
 import System.IO.Error
@@ -67,6 +68,8 @@ work svar req = do
                                             writeGame gameKey completeGame winners curTime
                                             pure $ OkResponse (toJSON ())
         NewLobby pInfo -> do
+            let pInfo' =
+                    pInfo & displayName %~ Text.take 100
             servState <- atomically $ readTVar svar
             if any (\lob -> lob^.ownerKey == req^.playerKey) (servState^.instances)
             then
@@ -76,19 +79,21 @@ work svar req = do
                 atomically $ do
                     modifyTVar svar $
                         instances . at newInstanceId .~ Just (WaitingInstance
-                            { _waitingPlayers = [(req^.playerKey, pInfo)]
+                            { _waitingPlayers = [(req^.playerKey, pInfo')]
                             , _ownerKey = req^.playerKey
                             , _lastUpdated = curTime
                             })
                 pure $ OkResponse (toJSON newInstanceId)
         JoinLobby lobbyKey pInfo -> do
+            let pInfo' =
+                    pInfo & displayName %~ Text.take 100
             atomically $ do
                 servState <- readTVar svar
                 case servState^.instances.at lobbyKey of
                     Nothing -> pure $ ErrorResponse "No such game"
                     Just (inst@WaitingInstance {}) -> do
                         modifyTVar svar $
-                            instances . ix lobbyKey . waitingPlayers %~ addPlayer (req^.playerKey) pInfo
+                            instances . ix lobbyKey . waitingPlayers %~ addPlayer (req^.playerKey) pInfo'
                         pure $ OkResponse (toJSON ())
                     Just _ -> pure $ ErrorResponse "Game already started"
         LeaveLobby lobbyKey -> do
