@@ -16,11 +16,13 @@
     border: 1px solid black;
 }
 
+.playerRow td {
+    text-align: center;
+    vertical-align: top;
+}
+
 .playerName {
-    display: table-cell;
-    padding: 0.3em;
-    vertical-align: middle;
-    text-align: left;
+    text-align: center;
 }
 
 .card {
@@ -329,8 +331,11 @@ table {
 }
 
 .instancePlayer {
+    max-width: 150px;
     padding: 3px;
     margin: 2px;
+    white-space: nowrap;
+    overflow: hidden;
     border: 1px solid black;
 }
 

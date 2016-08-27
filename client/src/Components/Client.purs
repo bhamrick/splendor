@@ -207,8 +207,9 @@ render dispatch p state _ =
                     , R.div' $
                         [ R.text "Players:" ]
                         <> foldMap (\(PlayerInfo p) ->
-                            [ R.text " "
-                            , R.text p.displayName
+                            [ R.div
+                                [ RP.className "instancePlayer" ]
+                                [ R.text (shortenName p.displayName) ]
                             ]) wiv.waitingPlayers
                     , R.button
                         [ RP.onClick \_ -> dispatch LeaveLobbyAction
@@ -233,6 +234,12 @@ render dispatch p state _ =
                         ]
                         (renderCompletedGame civ.result dispatch [] civ.completedGame [])
                     ]
+
+shortenName :: String -> String
+shortenName n =
+    if String.length n > 20
+    then String.take 17 n <> "..."
+    else n
 
 renderGameView :: Maybe ActionSelection -> T.Render (RunningGame GameView) _ _
 renderGameView selection dispatch p (RunningGame rg) _ =
@@ -287,20 +294,14 @@ renderGameView selection dispatch p (RunningGame rg) _ =
                         [ R.tbody []
                             ([ R.tr
                                 [ RP.className "playerRow" ]
-                                ([ R.td
-                                    [ RP.className "playerName" ]
-                                    [ R.text (fromMaybe "Player" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup gv.playerPosition rg.players))
-                                    ]
-                                ] <> renderPlayerState selection dispatch p gv.playerState [])
+                                (let name = (fromMaybe "Player" ((\(PlayerInfo pi) -> shortenName pi.displayName) <$> Map.lookup gv.playerPosition rg.players))
+                                in renderPlayerState name selection dispatch p gv.playerState [])
                             ] <>
                             Array.zipWith (\idx opp ->
                                 R.tr
                                     [ RP.className "playerRow" ]
-                                    ([ R.td
-                                        [ RP.className "playerName" ]
-                                        [ R.text (fromMaybe "Opponent" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup ((gv.playerPosition + 1 + idx)`mod` gv.numPlayers) rg.players))
-                                        ]
-                                    ] <> renderPlayerView dispatch p opp [])
+                                    (let name = (fromMaybe "Opponent" ((\(PlayerInfo pi) -> shortenName pi.displayName) <$> Map.lookup ((gv.playerPosition + 1 + idx) `mod` gv.numPlayers) rg.players))
+                                    in renderPlayerView name dispatch [] opp [])
                             ) (Array.range 0 (Array.length gv.opponentViews - 1)) gv.opponentViews)
                         ]
                     ]
@@ -313,7 +314,7 @@ renderGameView selection dispatch p (RunningGame rg) _ =
                         String.joinWith "\n" $
                             map (\(Tuple idx action) ->
                                 (case Map.lookup idx rg.players of
-                                    Just (PlayerInfo pi) -> pi.displayName
+                                    Just (PlayerInfo pi) -> shortenName pi.displayName
                                     _ -> "Player " <> show idx
                                 ) <> " " <> actionSummaryLine action
                             ) (Array.reverse gv.actionLog)
@@ -384,7 +385,7 @@ renderCompletedGame (GameWinners winners) dispatch p (RunningGame rg) _ =
                         [ R.text (String.joinWith " and " (map (\idx ->
                             case Map.lookup idx rg.players of
                                 Nothing -> "Player " <> show idx
-                                Just (PlayerInfo pi) -> pi.displayName
+                                Just (PlayerInfo pi) -> shortenName pi.displayName
                             ) winners) <> " won.")
                         , R.button
                             [ RP.onClick \_ -> dispatch LeaveLobbyAction
@@ -431,11 +432,8 @@ renderCompletedGame (GameWinners winners) dispatch p (RunningGame rg) _ =
                             (Array.zipWith (\idx player ->
                                 R.tr
                                     [ RP.className "playerRow" ]
-                                    ([ R.td
-                                        [ RP.className "playerName" ]
-                                        [ R.text (fromMaybe ("Player " <> show idx) ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup idx rg.players))
-                                        ]
-                                    ] <> renderPlayerState Nothing dispatch p player [])
+                                    (let name = fromMaybe ("Player " <> show idx) ((\(PlayerInfo pi) -> shortenName pi.displayName) <$> Map.lookup idx rg.players)
+                                    in renderPlayerState name Nothing dispatch [] player [])
                             ) (Array.range 0 (Array.length gs.playerStates - 1)) gs.playerStates)
                         ]
                     ]
@@ -448,7 +446,7 @@ renderCompletedGame (GameWinners winners) dispatch p (RunningGame rg) _ =
                         String.joinWith "\n" $
                             map (\(Tuple idx action) ->
                                 (case Map.lookup idx rg.players of
-                                    Just (PlayerInfo pi) -> pi.displayName
+                                    Just (PlayerInfo pi) -> shortenName pi.displayName
                                     _ -> "Player " <> show idx
                                 ) <> " " <> actionSummaryLine action
                             ) (Array.reverse gs.actionLog)
@@ -489,7 +487,7 @@ renderInstanceSummary dispatch _ (Tuple instKey (InstanceSummary is)) _ =
             (map (\(PlayerInfo pi) ->
                 R.div
                     [ RP.className "instancePlayer" ]
-                    [ R.text pi.displayName ]
+                    [ R.text (shortenName pi.displayName) ]
                 ) is.players
             )
         , R.div
@@ -504,7 +502,7 @@ renderInstanceSummary dispatch _ (Tuple instKey (InstanceSummary is)) _ =
 actionRequestText :: ActionRequest -> Map Int PlayerInfo -> String
 actionRequestText (ActionRequest ar) players =
     "Waiting for "
-    <> (fromMaybe "Unknown Player" ((\(PlayerInfo pi) -> pi.displayName) <$> Map.lookup ar.player players))
+    <> (fromMaybe "Unknown Player" ((\(PlayerInfo pi) -> shortenName pi.displayName) <$> Map.lookup ar.player players))
     <> (case ar.type_ of
         TurnRequest -> " to take their turn."
         DiscardChipRequest n -> " to discard " <> (show n) <> " chips."
@@ -703,8 +701,8 @@ renderDiscardChips selection dispatch p _ _ =
             Basic color -> colorClass color
             Gold -> "gold"
 
-renderPlayerState :: Maybe ActionSelection -> T.Render PlayerState _ _
-renderPlayerState selection dispatch p (PlayerState ps) _ =
+renderPlayerState :: String -> Maybe ActionSelection -> T.Render PlayerState _ _
+renderPlayerState name selection dispatch p (PlayerState ps) _ =
     let
     chipsToRender =
         case selection of
@@ -723,11 +721,13 @@ renderPlayerState selection dispatch p (PlayerState ps) _ =
     in
     [ R.td
         []
-        [ R.table []
+        [ R.div
+            [ RP.className "playerName" ]
+            [ R.text name ]
+        , R.table []
             [ R.tbody []
                 [ R.tr
-                    [ RP.className "cardRow"
-                    ]
+                    [ RP.className "cardRow" ]
                     (map (\color -> R.td
                         [ RP.className "ownedCards" ]
                         (let
@@ -806,15 +806,17 @@ renderPlayerState selection dispatch p (PlayerState ps) _ =
     chipNumber ctype chips =
         fromMaybe 0 (Map.lookup ctype chips)
 
-renderPlayerView :: T.Render PlayerView _ _
-renderPlayerView dispatch p (PlayerView pv) _ =
+renderPlayerView :: String -> T.Render PlayerView _ _
+renderPlayerView name dispatch p (PlayerView pv) _ =
     [ R.td
         []
-        [ R.table []
+        [ R.div
+            [ RP.className "playerName" ]
+            [ R.text name ]
+        , R.table []
             [ R.tbody []
                 [ R.tr
-                    [ RP.className "cardRow"
-                    ]
+                    [ RP.className "cardRow" ]
                     (map (\color -> R.td
                         [ RP.className "ownedCards"
                         ]
