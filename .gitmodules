@@ -1,0 +1,3 @@
+[submodule "record-lens"]
+    path=record-lens
+    url=git@github.com:bhamrick/record-lens
