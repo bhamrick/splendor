@@ -1,3 +1,6 @@
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiWayIf #-}
 module Splendor.Rules where
 
@@ -102,15 +105,15 @@ runAction idx a =
                         tier2Cards <- use (tier2State . availableCards)
                         tier3Cards <- use (tier3State . availableCards)
                         goldAvailable <- fromMaybe 0 <$> use (availableChips . at Gold)
-                        if | any (\c -> c^.cardId == cid) tier1Cards -> do
-                                case filter (\c -> c^.cardId == cid) tier1Cards of
+                        if | any (\c -> c^.id_ == cid) tier1Cards -> do
+                                case filter (\c -> c^.id_ == cid) tier1Cards of
                                     [card] -> do
                                         actionLog %= append (idx, Reserved card)
                                         playerStates . ix curTurn . reservedCards %= (card:)
                                         when (goldAvailable > 0) $ do
                                             playerStates . ix curTurn . heldChips . at Gold %= withDefault 0 (+1)
                                             availableChips . at Gold %= withDefault 0 (subtract 1)
-                                        tier1State . availableCards %= filter (\c -> c^.cardId /= cid)
+                                        tier1State . availableCards %= filter (\c -> c^.id_ /= cid)
                                         deck <- use (tier1State . tierDeck)
                                         case deck of
                                             [] -> pure ()
@@ -118,15 +121,15 @@ runAction idx a =
                                                 tier1State . availableCards %= (top:)
                                                 tier1State . tierDeck .= rest
                                     _ -> illegal
-                           | any (\c -> c^.cardId == cid) tier2Cards -> do
-                                case filter (\c -> c^.cardId == cid) tier2Cards of
+                           | any (\c -> c^.id_ == cid) tier2Cards -> do
+                                case filter (\c -> c^.id_ == cid) tier2Cards of
                                     [card] -> do
                                         actionLog %= append (idx, Reserved card)
                                         playerStates . ix curTurn . reservedCards %= (card:)
                                         when (goldAvailable > 0) $ do
                                             playerStates . ix curTurn . heldChips . at Gold %= withDefault 0 (+1)
                                             availableChips . at Gold %= withDefault 0 (subtract 1)
-                                        tier2State . availableCards %= filter (\c -> c^.cardId /= cid)
+                                        tier2State . availableCards %= filter (\c -> c^.id_ /= cid)
                                         deck <- use (tier2State . tierDeck)
                                         case deck of
                                             [] -> pure ()
@@ -134,15 +137,15 @@ runAction idx a =
                                                 tier2State . availableCards %= (top:)
                                                 tier2State . tierDeck .= rest
                                     _ -> illegal
-                           | any (\c -> c^.cardId == cid) tier3Cards -> do
-                                case filter (\c -> c^.cardId == cid) tier3Cards of
+                           | any (\c -> c^.id_ == cid) tier3Cards -> do
+                                case filter (\c -> c^.id_ == cid) tier3Cards of
                                     [card] -> do
                                         actionLog %= append (idx, Reserved card)
                                         playerStates . ix curTurn . reservedCards %= (card:)
                                         when (goldAvailable > 0) $ do
                                             playerStates . ix curTurn . heldChips . at Gold %= withDefault 0 (+1)
                                             availableChips . at Gold %= withDefault 0 (subtract 1)
-                                        tier3State . availableCards %= filter (\c -> c^.cardId /= cid)
+                                        tier3State . availableCards %= filter (\c -> c^.id_ /= cid)
                                         deck <- use (tier3State . tierDeck)
                                         case deck of
                                             [] -> pure ()
@@ -227,12 +230,12 @@ runAction idx a =
                         tier2Cards <- use (tier2State . availableCards)
                         tier3Cards <- use (tier3State . availableCards)
                         resCards <- use (playerStates . ix curTurn . reservedCards)
-                        if | any (\c -> c^.cardId == cid) tier1Cards -> do
-                                case filter (\c -> c^.cardId == cid) tier1Cards of
+                        if | any (\c -> c^.id_ == cid) tier1Cards -> do
+                                case filter (\c -> c^.id_ == cid) tier1Cards of
                                     [card] -> do
                                         actionLog %= append (idx, Bought card)
-                                        tier1State . availableCards %= filter (\c -> c^.cardId /= cid)
-                                        for_ (Map.toList (card^.cardCost)) $ \(color, n) -> do
+                                        tier1State . availableCards %= filter (\c -> c^.id_ /= cid)
+                                        for_ (Map.toList (card^.cost)) $ \(color, n) -> do
                                             numBasics <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . heldChips . ix (Basic color))
                                             numCards <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . ownedCardCounts . ix color)
                                             let colorPayment = max 0 (n - numCards)
@@ -246,8 +249,8 @@ runAction idx a =
                                                 playerStates . ix curTurn . heldChips . at Gold %= withDefault 0 (subtract (colorPayment - numBasics))
                                                 availableChips . at Gold %= withDefault 0 (+ (colorPayment - numBasics))
                                         playerStates . ix curTurn . ownedCards %= (card:)
-                                        playerStates . ix curTurn . ownedCardCounts . at (card^.cardColor) %= withDefault 0 (+1)
-                                        playerStates . ix curTurn . currentVP += card^.cardPoints
+                                        playerStates . ix curTurn . ownedCardCounts . at (card^.color) %= withDefault 0 (+1)
+                                        playerStates . ix curTurn . currentVP += card^.points
                                         resultingChipCounts <- use (playerStates . ix curTurn . heldChips)
                                         when (any (< 0) resultingChipCounts) illegal
                                         deck <- use (tier1State . tierDeck)
@@ -257,12 +260,12 @@ runAction idx a =
                                                 tier1State . availableCards %= (top:)
                                                 tier1State . tierDeck .= rest
                                     _ -> illegal
-                           | any (\c -> c^.cardId == cid) tier2Cards -> do
-                                case filter (\c -> c^.cardId == cid) tier2Cards of
+                           | any (\c -> c^.id_ == cid) tier2Cards -> do
+                                case filter (\c -> c^.id_ == cid) tier2Cards of
                                     [card] -> do
                                         actionLog %= append (idx, Bought card)
-                                        tier2State . availableCards %= filter (\c -> c^.cardId /= cid)
-                                        for_ (Map.toList (card^.cardCost)) $ \(color, n) -> do
+                                        tier2State . availableCards %= filter (\c -> c^.id_ /= cid)
+                                        for_ (Map.toList (card^.cost)) $ \(color, n) -> do
                                             numBasics <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . heldChips . ix (Basic color))
                                             numCards <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . ownedCardCounts . ix color)
                                             let colorPayment = max 0 (n - numCards)
@@ -276,8 +279,8 @@ runAction idx a =
                                                 playerStates . ix curTurn . heldChips . at Gold %= withDefault 0 (subtract (colorPayment - numBasics))
                                                 availableChips . at Gold %= withDefault 0 (+ (colorPayment - numBasics))
                                         playerStates . ix curTurn . ownedCards %= (card:)
-                                        playerStates . ix curTurn . ownedCardCounts . at (card^.cardColor) %= withDefault 0 (+1)
-                                        playerStates . ix curTurn . currentVP += card^.cardPoints
+                                        playerStates . ix curTurn . ownedCardCounts . at (card^.color) %= withDefault 0 (+1)
+                                        playerStates . ix curTurn . currentVP += card^.points
                                         resultingChipCounts <- use (playerStates . ix curTurn . heldChips)
                                         when (any (< 0) resultingChipCounts) illegal
                                         deck <- use (tier2State . tierDeck)
@@ -287,12 +290,12 @@ runAction idx a =
                                                 tier2State . availableCards %= (top:)
                                                 tier2State . tierDeck .= rest
                                     _ -> illegal
-                           | any (\c -> c^.cardId == cid) tier3Cards -> do
-                                case filter (\c -> c^.cardId == cid) tier3Cards of
+                           | any (\c -> c^.id_ == cid) tier3Cards -> do
+                                case filter (\c -> c^.id_ == cid) tier3Cards of
                                     [card] -> do
                                         actionLog %= append (idx, Bought card)
-                                        tier3State . availableCards %= filter (\c -> c^.cardId /= cid)
-                                        for_ (Map.toList (card^.cardCost)) $ \(color, n) -> do
+                                        tier3State . availableCards %= filter (\c -> c^.id_ /= cid)
+                                        for_ (Map.toList (card^.cost)) $ \(color, n) -> do
                                             numBasics <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . heldChips . ix (Basic color))
                                             numCards <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . ownedCardCounts . ix color)
                                             let colorPayment = max 0 (n - numCards)
@@ -306,8 +309,8 @@ runAction idx a =
                                                 playerStates . ix curTurn . heldChips . at Gold %= withDefault 0 (subtract (colorPayment - numBasics))
                                                 availableChips . at Gold %= withDefault 0 (+ (colorPayment - numBasics))
                                         playerStates . ix curTurn . ownedCards %= (card:)
-                                        playerStates . ix curTurn . ownedCardCounts . at (card^.cardColor) %= withDefault 0 (+1)
-                                        playerStates . ix curTurn . currentVP += card^.cardPoints
+                                        playerStates . ix curTurn . ownedCardCounts . at (card^.color) %= withDefault 0 (+1)
+                                        playerStates . ix curTurn . currentVP += card^.points
                                         resultingChipCounts <- use (playerStates . ix curTurn . heldChips)
                                         when (any (< 0) resultingChipCounts) illegal
                                         deck <- use (tier3State . tierDeck)
@@ -317,11 +320,11 @@ runAction idx a =
                                                 tier3State . availableCards %= (top:)
                                                 tier3State . tierDeck .= rest
                                     _ -> illegal
-                           | any (\c -> c^.cardId == cid) resCards -> do
-                                case filter (\c -> c^.cardId == cid) resCards of
+                           | any (\c -> c^.id_ == cid) resCards -> do
+                                case filter (\c -> c^.id_ == cid) resCards of
                                     [card] -> do
                                         actionLog %= append (idx, Bought card)
-                                        for_ (Map.toList (card^.cardCost)) $ \(color, n) -> do
+                                        for_ (Map.toList (card^.cost)) $ \(color, n) -> do
                                             numBasics <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . heldChips . ix (Basic color))
                                             numCards <- fromMaybe 0 <$> preuse (playerStates . ix curTurn . ownedCardCounts . ix color)
                                             let colorPayment = max 0 (n - numCards)
@@ -335,9 +338,9 @@ runAction idx a =
                                                 playerStates . ix curTurn . heldChips . at Gold %= withDefault 0 (subtract (colorPayment - numBasics))
                                                 availableChips . at Gold %= withDefault 0 (+ (colorPayment - numBasics))
                                         playerStates . ix curTurn . ownedCards %= (card:)
-                                        playerStates . ix curTurn . ownedCardCounts . at (card^.cardColor) %= withDefault 0 (+1)
-                                        playerStates . ix curTurn . currentVP += card^.cardPoints
-                                        playerStates . ix curTurn . reservedCards %= filter (\c -> c^.cardId /= cid)
+                                        playerStates . ix curTurn . ownedCardCounts . at (card^.color) %= withDefault 0 (+1)
+                                        playerStates . ix curTurn . currentVP += card^.points
+                                        playerStates . ix curTurn . reservedCards %= filter (\c -> c^.id_ /= cid)
                                         resultingChipCounts <- use (playerStates . ix curTurn . heldChips)
                                         when (any (< 0) resultingChipCounts) illegal
                                     _ -> illegal
@@ -349,7 +352,7 @@ runAction idx a =
                                 filter
                                     (\noble -> all
                                         (\(color, k) -> fromMaybe 0 (Map.lookup color playerCards) >= k)
-                                        (Map.toList (noble^.nobleRequirement)))
+                                        (Map.toList (noble^.requirement)))
                                     boardNobles
                         case matchingNobles of
                             [] -> do
@@ -362,7 +365,7 @@ runAction idx a =
                                 actionLog %= append (idx, GainedNoble noble)
                                 availableNobles %= filter (/= noble)
                                 playerStates . ix curTurn . ownedNobles %= (noble:)
-                                playerStates . ix curTurn . currentVP += (noble^.noblePoints)
+                                playerStates . ix curTurn . currentVP += (noble^.points)
                                 nPlayers <- use numPlayers
                                 currentRequest .= ActionRequest
                                     { _requestPlayer = (curTurn + 1) `mod` nPlayers
@@ -394,13 +397,13 @@ runAction idx a =
                 case a of
                     SelectNoble nid -> do
                         boardNobles <- use availableNobles
-                        let matchingNobles = filter (\n -> n^.nobleId == nid) boardNobles
+                        let matchingNobles = filter (\n -> n^.id_ == nid) boardNobles
                         case matchingNobles of
                             [noble] -> do
                                 actionLog %= append (idx, GainedNoble noble)
                                 availableNobles %= filter (/= noble)
                                 playerStates . ix curTurn . ownedNobles %= (noble:)
-                                playerStates . ix curTurn . currentVP += (noble^.noblePoints)
+                                playerStates . ix curTurn . currentVP += (noble^.points)
                                 nPlayers <- use numPlayers
                                 currentRequest .= ActionRequest
                                     { _requestPlayer = (curTurn + 1) `mod` nPlayers
@@ -435,10 +438,10 @@ initState n = do
     let numCards1 = length tier1CardOrder
         numCards2 = length tier2CardOrder
         numCards3 = length tier3CardOrder
-        tier1Deck = zipWith (\card i -> card & cardId .~ CardId i) tier1CardOrder [1 .. numCards1]
-        tier2Deck = zipWith (\card i -> card & cardId .~ CardId i) tier2CardOrder [numCards1 + 1 .. numCards1 + numCards2]
-        tier3Deck = zipWith (\card i -> card & cardId .~ CardId i) tier3CardOrder [numCards1 + numCards2 + 1 .. numCards1 + numCards2 + numCards3]
-    playNobles <- zipWith (\i noble -> noble & nobleId .~ NobleId i) [1..] . take (n+1) <$> shuffleM nobleSet
+        tier1Deck = zipWith (\card i -> card & id_ .~ CardId i) tier1CardOrder [1 .. numCards1]
+        tier2Deck = zipWith (\card i -> card & id_ .~ CardId i) tier2CardOrder [numCards1 + 1 .. numCards1 + numCards2]
+        tier3Deck = zipWith (\card i -> card & id_ .~ CardId i) tier3CardOrder [numCards1 + numCards2 + 1 .. numCards1 + numCards2 + numCards3]
+    playNobles <- zipWith (\i noble -> noble & id_ .~ NobleId i) [1..] . take (n+1) <$> shuffleM nobleSet
     if n < 2 || n > 4
     then
         pure Nothing
@@ -502,33 +505,33 @@ initState n = do
 viewPlayer :: PlayerState -> PlayerView
 viewPlayer p =
     PlayerView
-        { _pvHeldChips = p^.heldChips
-        , _pvOwnedCards = p^.ownedCards
-        , _pvOwnedCardCounts = p^.ownedCardCounts
-        , _pvReservedCardCount = length (p^.reservedCards)
-        , _pvOwnedNobles = p^.ownedNobles
-        , _pvCurrentVP = p^.currentVP
+        { _heldChips = p^.heldChips
+        , _ownedCards = p^.ownedCards
+        , _ownedCardCounts = p^.ownedCardCounts
+        , _reservedCardCount = length (p^.reservedCards)
+        , _ownedNobles = p^.ownedNobles
+        , _currentVP = p^.currentVP
         }
 
 viewTier :: TierState -> TierView
 viewTier t =
     TierView
-        { _tvAvailableCards = t^.availableCards
-        , _tvDeckCount = length (t^.tierDeck)
+        { _availableCards = t^.availableCards
+        , _deckCount = length (t^.tierDeck)
         }
 
 viewGame :: Int -> GameState -> GameView
 viewGame pos g =
     GameView
-        { _gvNumPlayers = g^.numPlayers
-        , _gvPlayerPosition = pos
-        , _gvPlayerState = (g^.playerStates) Vector.! pos
-        , _gvOpponentViews = map (\i -> viewPlayer ((g^.playerStates) Vector.! i)) ([pos+1 .. g^.numPlayers-1] <> [0 .. pos-1])
-        , _gvAvailableChips = g^.availableChips
-        , _gvAvailableNobles = g^.availableNobles
-        , _gvTier1View = viewTier (g^.tier1State)
-        , _gvTier2View = viewTier (g^.tier2State)
-        , _gvTier3View = viewTier (g^.tier3State)
-        , _gvCurrentRequest = g^.currentRequest
-        , _gvActionLog = g^.actionLog
+        { _numPlayers = g^.numPlayers
+        , _playerPosition = pos
+        , _playerState = (g^.playerStates) Vector.! pos
+        , _opponentViews = map (\i -> viewPlayer ((g^.playerStates) Vector.! i)) ([pos+1 .. g^.numPlayers-1] <> [0 .. pos-1])
+        , _availableChips = g^.availableChips
+        , _availableNobles = g^.availableNobles
+        , _tier1View = viewTier (g^.tier1State)
+        , _tier2View = viewTier (g^.tier2State)
+        , _tier3View = viewTier (g^.tier3State)
+        , _currentRequest = g^.currentRequest
+        , _actionLog = g^.actionLog
         }

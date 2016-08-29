@@ -39,6 +39,7 @@ executable splendor
                      , random-shuffle >=0.0
                      , stm >=2.4
                      , text >=1.2
+                     , template-haskell >=2.11
                      , time >=1.6
                      , vector >=0.11
                      , wai >=3.2

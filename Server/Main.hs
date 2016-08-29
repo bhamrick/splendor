@@ -26,7 +26,7 @@ import Network.Wai.Handler.Warp
 
 import Lucid hiding (for_)
 
-import Splendor.Types
+import Splendor.Types hiding (id_)
 import Splendor.Rules
 import Server.GameLogs
 import Server.Identifier

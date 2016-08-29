@@ -1,6 +1,11 @@
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Splendor.Types where
 
@@ -13,6 +18,8 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Text.Read
 import GHC.Generics
+
+import Language.Record.Lens
 
 newtype CardId = CardId Int
     deriving (Eq, Show, Ord, Enum, Generic)
@@ -99,10 +106,10 @@ instance FromJSON ActionSummary
 
 data Card
     = Card
-        { _cardId :: CardId
-        , _cardColor :: Color
-        , _cardPoints :: Int
-        , _cardCost :: Map Color Int
+        { _id_ :: CardId
+        , _color :: Color
+        , _points :: Int
+        , _cost :: Map Color Int
         }
     deriving (Eq, Show, Ord, Generic)
 
@@ -111,9 +118,9 @@ instance FromJSON Card
 
 data Noble
     = Noble
-        { _nobleId :: NobleId
-        , _nobleRequirement :: Map Color Int
-        , _noblePoints :: Int
+        { _id_ :: NobleId
+        , _requirement :: Map Color Int
+        , _points :: Int
         }
     deriving (Eq, Show, Ord, Generic)
 
@@ -136,12 +143,12 @@ instance FromJSON PlayerState
 
 data PlayerView
     = PlayerView
-        { _pvHeldChips :: Map ChipType Int
-        , _pvOwnedCards :: [Card]
-        , _pvOwnedCardCounts :: Map Color Int
-        , _pvReservedCardCount :: Int
-        , _pvOwnedNobles :: [Noble]
-        , _pvCurrentVP :: Int
+        { _heldChips :: Map ChipType Int
+        , _ownedCards :: [Card]
+        , _ownedCardCounts :: Map Color Int
+        , _reservedCardCount :: Int
+        , _ownedNobles :: [Noble]
+        , _currentVP :: Int
         }
     deriving (Eq, Show, Ord, Generic)
 
@@ -160,8 +167,8 @@ instance FromJSON TierState
 
 data TierView
     = TierView
-        { _tvAvailableCards :: [Card]
-        , _tvDeckCount :: Int
+        { _availableCards :: [Card]
+        , _deckCount :: Int
         }
     deriving (Eq, Show, Ord, Generic)
 
@@ -213,29 +220,29 @@ instance FromJSON GameResult
 
 data GameView
     = GameView
-        { _gvNumPlayers :: Int
-        , _gvPlayerPosition :: Int
-        , _gvPlayerState :: PlayerState
-        , _gvOpponentViews :: [PlayerView]
-        , _gvAvailableChips :: Map ChipType Int
-        , _gvAvailableNobles :: [Noble]
-        , _gvTier1View :: TierView
-        , _gvTier2View :: TierView
-        , _gvTier3View :: TierView
-        , _gvCurrentRequest :: ActionRequest
-        , _gvActionLog :: [(Int, ActionSummary)]
+        { _numPlayers :: Int
+        , _playerPosition :: Int
+        , _playerState :: PlayerState
+        , _opponentViews :: [PlayerView]
+        , _availableChips :: Map ChipType Int
+        , _availableNobles :: [Noble]
+        , _tier1View :: TierView
+        , _tier2View :: TierView
+        , _tier3View :: TierView
+        , _currentRequest :: ActionRequest
+        , _actionLog :: [(Int, ActionSummary)]
         }
     deriving (Eq, Show, Ord, Generic)
 
 instance ToJSON GameView
 instance FromJSON GameView
 
-makeLenses ''Card
-makeLenses ''Noble
-makeLenses ''ActionRequest
-makeLenses ''PlayerState
-makeLenses ''TierState
-makeLenses ''GameState
-makeLenses ''PlayerView
-makeLenses ''TierView
-makeLenses ''GameView
+mkRecords' ''Card
+mkRecords' ''Noble
+mkRecords' ''PlayerState
+mkRecords' ''PlayerView
+mkRecords' ''TierState
+mkRecords' ''TierView
+mkRecords' ''ActionRequest
+mkRecords' ''GameState
+mkRecords' ''GameView

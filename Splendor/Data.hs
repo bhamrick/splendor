@@ -1,3 +1,4 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 module Splendor.Data
     ( tier1CardSet
     , tier2CardSet
@@ -11,10 +12,10 @@ import Splendor.Types
 card :: Color -> Int -> [(Color, Int)] -> Card
 card c p cost =
     Card
-        { _cardId = CardId 0
-        , _cardColor = c
-        , _cardPoints = p
-        , _cardCost = Map.fromList cost
+        { _id_ = CardId 0
+        , _color = c
+        , _points = p
+        , _cost = Map.fromList cost
         }
 
 tier1CardSet :: [Card]
@@ -122,9 +123,9 @@ tier3CardSet =
 noble :: Int -> [(Color, Int)] -> Noble
 noble p req =
     Noble
-        { _nobleId = NobleId 0
-        , _nobleRequirement = Map.fromList req
-        , _noblePoints = p
+        { _id_ = NobleId 0
+        , _requirement = Map.fromList req
+        , _points = p
         }
 
 nobleSet :: [Noble]
