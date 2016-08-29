@@ -1,6 +1,12 @@
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Server.Types where
 
@@ -15,6 +21,8 @@ import Data.Traversable
 import GHC.Generics
 import Text.Read
 import Splendor.Types
+
+import Language.Record.Lens
 
 data PlayerInfo =
     PlayerInfo
@@ -70,14 +78,14 @@ data Instance
 
 data InstanceView
     = WaitingInstanceView
-        { _ivWaitingPlayers :: [PlayerInfo]
+        { _waitingPlayers :: [PlayerInfo]
         }
     | RunningInstanceView
-        { _ivRunningGame :: RunningGame GameView
+        { _runningGame :: RunningGame GameView
         }
     | CompletedInstanceView
-        { _ivCompletedGame :: RunningGame GameState
-        , _ivResult :: GameResult
+        { _completedGame :: RunningGame GameState
+        , _result :: GameResult
         }
     deriving (Eq, Show, Ord, Generic)
 
@@ -95,8 +103,8 @@ instance FromJSON InstanceState
 
 data InstanceSummary
     = InstanceSummary
-        { _isPlayers :: [PlayerInfo]
-        , _isState :: InstanceState
+        { _players :: [PlayerInfo]
+        , _state :: InstanceState
         }
     deriving (Eq, Show, Ord, Generic)
 
@@ -140,9 +148,9 @@ data ServerState =
         }
     deriving (Eq, Show, Ord)
 
-makeLenses ''PlayerInfo
-makeLenses ''RunningGame
-makeLenses ''Instance
-makeLenses ''InstanceView
-makeLenses ''ServerState
-makeLenses ''ServerRequest
+mkRecords' ''PlayerInfo
+mkRecords' ''RunningGame
+mkRecords' ''Instance
+mkRecords' ''InstanceView
+mkRecords' ''ServerState
+mkRecords' ''ServerRequest

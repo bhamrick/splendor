@@ -1,3 +1,4 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
@@ -180,18 +181,18 @@ summarizeInstance inst =
     case inst of
         WaitingInstance { _waitingPlayers = players } ->
             InstanceSummary
-                { _isPlayers = map snd players
-                , _isState = Waiting
+                { _players = map snd players
+                , _state = Waiting
                 }
         RunningInstance { _runningGame = rg } ->
             InstanceSummary
-                { _isPlayers = toList (rg^.players)
-                , _isState = Running
+                { _players = toList (rg^.players)
+                , _state = Running
                 }
         CompletedInstance { _completedGame = rg } ->
             InstanceSummary
-                { _isPlayers = toList (rg^.players)
-                , _isState = Completed
+                { _players = toList (rg^.players)
+                , _state = Completed
                 }
 
 viewInstance :: String -> Instance -> Maybe InstanceView
@@ -199,7 +200,7 @@ viewInstance playerKey inst =
     case inst of
         WaitingInstance { _waitingPlayers = players } ->
             Just $ WaitingInstanceView
-                { _ivWaitingPlayers = map snd players
+                { _waitingPlayers = map snd players
                 }
         RunningInstance
                 { _playerKeys = keyMap
@@ -209,15 +210,15 @@ viewInstance playerKey inst =
                 Nothing -> Nothing
                 Just idx ->
                     Just $ RunningInstanceView
-                        { _ivRunningGame = viewGame idx <$> rg
+                        { _runningGame = viewGame idx <$> rg
                         }
         CompletedInstance
                 { _completedGame = cg
                 , _result = res
                 } ->
             Just $ CompletedInstanceView
-                { _ivCompletedGame = cg
-                , _ivResult = res
+                { _completedGame = cg
+                , _result = res
                 }
 
 mainPage :: Html ()
