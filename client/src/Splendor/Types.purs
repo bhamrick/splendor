@@ -341,11 +341,11 @@ newtype Card = Card
 instance decodeJsonCard :: DecodeJson Card where
     decodeJson json = do
         obj <- decodeJson json
-        cId <- obj .? "_cardId"
-        cColor <- obj .? "_cardColor"
-        cCostJson <- obj .? "_cardCost"
+        cId <- obj .? "_id_"
+        cColor <- obj .? "_color"
+        cCostJson <- obj .? "_cost"
         cCost <- mapFromJson cCostJson
-        cPoints <- obj .? "_cardPoints"
+        cPoints <- obj .? "_points"
         pure $ Card
             { id: cId
             , color: cColor
@@ -355,10 +355,10 @@ instance decodeJsonCard :: DecodeJson Card where
 
 instance encodeJsonCard :: EncodeJson Card where
     encodeJson (Card c) =
-        "_cardId" := c.id
-        ~> "_cardColor" := c.color
-        ~> "_cardPoints" := c.points
-        ~> "_cardCost" := mapToJson c.cost
+        "_id_" := c.id
+        ~> "_color" := c.color
+        ~> "_points" := c.points
+        ~> "_cost" := mapToJson c.cost
         ~> jsonEmptyObject
 
 newtype Noble = Noble
@@ -370,10 +370,10 @@ newtype Noble = Noble
 instance decodeJsonNoble :: DecodeJson Noble where
     decodeJson json = do
         obj <- decodeJson json
-        nId <- obj .? "_nobleId"
-        nRequirementJson <- obj .? "_nobleRequirement"
+        nId <- obj .? "_id_"
+        nRequirementJson <- obj .? "_requirement"
         nRequirement <- mapFromJson nRequirementJson
-        nPoints <- obj .? "_noblePoints"
+        nPoints <- obj .? "_points"
         pure $ Noble
             { id: nId
             , requirement: nRequirement
@@ -382,9 +382,9 @@ instance decodeJsonNoble :: DecodeJson Noble where
 
 instance encodeJsonNoble :: EncodeJson Noble where
     encodeJson (Noble n) =
-        "_nobleId" := n.id
-        ~> "_nobleRequirement" := mapToJson n.requirement
-        ~> "_noblePoints" := n.points
+        "_id_" := n.id
+        ~> "_requirement" := mapToJson n.requirement
+        ~> "_points" := n.points
         ~> jsonEmptyObject
 
 newtype PlayerState = PlayerState
@@ -438,14 +438,14 @@ newtype PlayerView = PlayerView
 instance decodeJsonPlayerView :: DecodeJson PlayerView where
     decodeJson json = do
         obj <- decodeJson json
-        heldChipsJson <- obj .? "_pvHeldChips"
+        heldChipsJson <- obj .? "_heldChips"
         heldChips <- mapFromJson heldChipsJson
-        ownedCards <- obj .? "_pvOwnedCards"
-        ownedCardCountsJson <- obj .? "_pvOwnedCardCounts"
+        ownedCards <- obj .? "_ownedCards"
+        ownedCardCountsJson <- obj .? "_ownedCardCounts"
         ownedCardCounts <- mapFromJson ownedCardCountsJson
-        reservedCardCount <- obj .? "_pvReservedCardCount"
-        ownedNobles <- obj .? "_pvOwnedNobles"
-        currentVP <- obj .? "_pvCurrentVP"
+        reservedCardCount <- obj .? "_reservedCardCount"
+        ownedNobles <- obj .? "_ownedNobles"
+        currentVP <- obj .? "_currentVP"
         pure $ PlayerView
             { heldChips: heldChips
             , ownedCards: ownedCards
@@ -457,12 +457,12 @@ instance decodeJsonPlayerView :: DecodeJson PlayerView where
 
 instance encodeJsonPlayerView :: EncodeJson PlayerView where
     encodeJson (PlayerView pv) =
-        "_pvHeldChips" := mapToJson pv.heldChips
-        ~> "_pvOwnedCards" := pv.ownedCards
-        ~> "_pvOwnedCardCounts" := mapToJson pv.ownedCardCounts
-        ~> "_pvReservedCardCount" := pv.reservedCardCount
-        ~> "_pvOwnedNobles" := pv.ownedNobles
-        ~> "_pvCurrentVP" := pv.currentVP
+        "_heldChips" := mapToJson pv.heldChips
+        ~> "_ownedCards" := pv.ownedCards
+        ~> "_ownedCardCounts" := mapToJson pv.ownedCardCounts
+        ~> "_reservedCardCount" := pv.reservedCardCount
+        ~> "_ownedNobles" := pv.ownedNobles
+        ~> "_currentVP" := pv.currentVP
         ~> jsonEmptyObject
 
 newtype TierState = TierState
@@ -494,8 +494,8 @@ newtype TierView = TierView
 instance decodeJsonTierView :: DecodeJson TierView where
     decodeJson json = do
         obj <- decodeJson json
-        availableCards <- obj .? "_tvAvailableCards"
-        deckCount <- obj .? "_tvDeckCount"
+        availableCards <- obj .? "_availableCards"
+        deckCount <- obj .? "_deckCount"
         pure $ TierView
             { availableCards: availableCards
             , deckCount: deckCount
@@ -503,8 +503,8 @@ instance decodeJsonTierView :: DecodeJson TierView where
 
 instance encodeJsonTierView :: EncodeJson TierView where
     encodeJson (TierView tv) =
-        "_tvAvailableCards" := tv.availableCards
-        ~> "_tvDeckCount" := tv.deckCount
+        "_availableCards" := tv.availableCards
+        ~> "_deckCount" := tv.deckCount
         ~> jsonEmptyObject
 
 data ActionRequestType
@@ -639,18 +639,18 @@ newtype GameView = GameView
 instance decodeJsonGameView :: DecodeJson GameView where
     decodeJson json = do
         obj <- decodeJson json
-        numPlayers <- obj .? "_gvNumPlayers"
-        playerPosition <- obj .? "_gvPlayerPosition"
-        playerState <- obj .? "_gvPlayerState"
-        opponentViews <- obj .? "_gvOpponentViews"
-        availableChipsJson <- obj .? "_gvAvailableChips"
+        numPlayers <- obj .? "_numPlayers"
+        playerPosition <- obj .? "_playerPosition"
+        playerState <- obj .? "_playerState"
+        opponentViews <- obj .? "_opponentViews"
+        availableChipsJson <- obj .? "_availableChips"
         availableChips <- mapFromJson availableChipsJson
-        availableNobles <- obj .? "_gvAvailableNobles"
-        tier1View <- obj .? "_gvTier1View"
-        tier2View <- obj .? "_gvTier2View"
-        tier3View <- obj .? "_gvTier3View"
-        currentRequest <- obj .? "_gvCurrentRequest"
-        actionLog <- obj .? "_gvActionLog"
+        availableNobles <- obj .? "_availableNobles"
+        tier1View <- obj .? "_tier1View"
+        tier2View <- obj .? "_tier2View"
+        tier3View <- obj .? "_tier3View"
+        currentRequest <- obj .? "_currentRequest"
+        actionLog <- obj .? "_actionLog"
         pure $ GameView
             { numPlayers: numPlayers
             , playerPosition: playerPosition
@@ -667,17 +667,17 @@ instance decodeJsonGameView :: DecodeJson GameView where
 
 instance encodeJsonGameView :: EncodeJson GameView where
     encodeJson (GameView gv) =
-        "_gvNumPlayers" := gv.numPlayers
-        ~> "_gvPlayerPosition" := gv.playerPosition
-        ~> "_gvPlayerState" := gv.playerState
-        ~> "_gvOpponentViews" := gv.opponentViews
-        ~> "_gvAvailableChips" := mapToJson gv.availableChips
-        ~> "_gvAvailableNobles" := gv.availableNobles
-        ~> "_gvTier1View" := gv.tier1View
-        ~> "_gvTier2View" := gv.tier2View
-        ~> "_gvTier3View" := gv.tier3View
-        ~> "_gvCurrentRequest" := gv.currentRequest
-        ~> "_gvActionLog" := gv.actionLog
+        "_numPlayers" := gv.numPlayers
+        ~> "_playerPosition" := gv.playerPosition
+        ~> "_playerState" := gv.playerState
+        ~> "_opponentViews" := gv.opponentViews
+        ~> "_availableChips" := mapToJson gv.availableChips
+        ~> "_availableNobles" := gv.availableNobles
+        ~> "_tier1View" := gv.tier1View
+        ~> "_tier2View" := gv.tier2View
+        ~> "_tier3View" := gv.tier3View
+        ~> "_currentRequest" := gv.currentRequest
+        ~> "_actionLog" := gv.actionLog
         ~> jsonEmptyObject
 
 data GameResult
@@ -789,8 +789,8 @@ instance showInstanceSummary :: Show InstanceSummary where
 instance decodeInstanceSummary :: DecodeJson InstanceSummary where
     decodeJson json = do
         obj <- decodeJson json
-        players <- obj .? "_isPlayers"
-        state <- obj .? "_isState"
+        players <- obj .? "_players"
+        state <- obj .? "_state"
         pure $ InstanceSummary
             { players: players
             , state: state
@@ -798,8 +798,8 @@ instance decodeInstanceSummary :: DecodeJson InstanceSummary where
 
 instance encodeInstanceSummary :: EncodeJson InstanceSummary where
     encodeJson (InstanceSummary is) =
-        "_isPlayers" := is.players
-        ~> "_isState" := is.state
+        "_players" := is.players
+        ~> "_state" := is.state
         ~> jsonEmptyObject
 
 data InstanceView
@@ -820,18 +820,18 @@ instance decodeInstanceView :: DecodeJson InstanceView where
         tag <- obj .? "tag"
         case tag of
             "WaitingInstanceView" -> do
-                waitingPlayers <- obj .? "_ivWaitingPlayers"
+                waitingPlayers <- obj .? "_waitingPlayers"
                 pure $ WaitingInstanceView
                     { waitingPlayers: waitingPlayers
                     }
             "RunningInstanceView" -> do
-                runningGame <- obj .? "_ivRunningGame"
+                runningGame <- obj .? "_runningGame"
                 pure $ RunningInstanceView
                     { runningGame: runningGame
                     }
             "CompletedInstanceView" -> do
-                completedGame <- obj .? "_ivCompletedGame"
-                result <- obj .? "_ivResult"
+                completedGame <- obj .? "_completedGame"
+                result <- obj .? "_result"
                 pure $ CompletedInstanceView
                     { completedGame: completedGame
                     , result: result
@@ -843,16 +843,16 @@ instance encodeInstanceView :: EncodeJson InstanceView where
         case iv of
             WaitingInstanceView wiv ->
                 "tag" := "WaitingInstanceView"
-                ~> "_ivWaitingPlayers" := wiv.waitingPlayers
+                ~> "_waitingPlayers" := wiv.waitingPlayers
                 ~> jsonEmptyObject
             RunningInstanceView riv ->
                 "tag" := "RunningInstanceView"
-                ~> "_ivRunningGame" := riv.runningGame
+                ~> "_runningGame" := riv.runningGame
                 ~> jsonEmptyObject
             CompletedInstanceView civ ->
                 "tag" := "CompletedInstanceView"
-                ~> "_ivCompletedGame" := civ.completedGame
-                ~> "_ivResult" := civ.result
+                ~> "_completedGame" := civ.completedGame
+                ~> "_result" := civ.result
                 ~> jsonEmptyObject
 
 newtype ServerRequest a = ServerRequest
