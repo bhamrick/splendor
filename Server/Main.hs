@@ -89,7 +89,11 @@ work svar req = do
                         instances . at newInstanceId .~ Just (Instance
                             { _lastUpdated = curTime
                             , _name = if Text.null (params^.name)
-                                then Text.take 20 (pInfo'^.displayName) <> "...'s game"
+                                then (\n ->
+                                    if Text.length n > 20
+                                    then Text.take 20 n <> "...'s game"
+                                    else n <> "'s game"
+                                    ) (pInfo'^.displayName)
                                 else Text.take 100 (params^.name)
                             , _details = WaitingInstance
                                 { _waitingPlayers = [(req^.playerKey, pInfo')]
