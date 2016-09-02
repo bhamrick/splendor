@@ -58,27 +58,44 @@ instance ToJSON a => ToJSON (RunningGame a)
 instance FromJSON a => FromJSON (RunningGame a)
 
 data Instance
+    = Instance
+        { _name :: Text
+        , _lastUpdated :: UTCTime
+        , _details :: InstanceDetails
+        }
+    deriving (Eq, Show, Ord, Generic)
+
+data InstanceDetails
     = WaitingInstance
         { _waitingPlayers :: [(String, PlayerInfo)]
+        , _maxPlayers :: Int
         , _ownerKey :: String
-        , _lastUpdated :: UTCTime
         }
     | RunningInstance
         { _playerKeys :: Map String Int
         , _runningGame :: RunningGame GameState
-        , _lastUpdated :: UTCTime
         }
     | CompletedInstance
         { _playerKeys :: Map String Int
         , _completedGame :: RunningGame GameState
         , _result :: GameResult
-        , _lastUpdated :: UTCTime
         }
     deriving (Eq, Show, Ord, Generic)
 
 data InstanceView
+    = InstanceView
+        { _name :: Text
+        , _details :: InstanceViewDetails
+        }
+    deriving (Eq, Show, Ord, Generic)
+
+instance ToJSON InstanceView
+instance FromJSON InstanceView
+
+data InstanceViewDetails
     = WaitingInstanceView
         { _waitingPlayers :: [PlayerInfo]
+        , _maxPlayers :: Int
         }
     | RunningInstanceView
         { _runningGame :: RunningGame GameView
@@ -89,8 +106,8 @@ data InstanceView
         }
     deriving (Eq, Show, Ord, Generic)
 
-instance ToJSON InstanceView
-instance FromJSON InstanceView
+instance ToJSON InstanceViewDetails
+instance FromJSON InstanceViewDetails
 
 data InstanceState
     = Waiting
@@ -103,8 +120,10 @@ instance FromJSON InstanceState
 
 data InstanceSummary
     = InstanceSummary
-        { _players :: [PlayerInfo]
+        { _name :: Text
+        , _players :: [PlayerInfo]
         , _state :: InstanceState
+        , _maxPlayers :: Maybe Int
         }
     deriving (Eq, Show, Ord, Generic)
 
@@ -121,9 +140,19 @@ data ServerRequest a =
 instance ToJSON a => ToJSON (ServerRequest a)
 instance FromJSON a => FromJSON (ServerRequest a)
 
+data NewGameParams
+    = NewGameParams
+        { _name :: Text
+        , _maxPlayers :: Int
+        }
+    deriving (Eq, Show, Ord, Generic)
+
+instance ToJSON NewGameParams
+instance FromJSON NewGameParams
+
 data RequestData
     = ListLobbies
-    | NewLobby PlayerInfo
+    | NewLobby PlayerInfo NewGameParams
     | JoinLobby String PlayerInfo
     | LeaveLobby String
     | StartGame String
@@ -150,7 +179,10 @@ data ServerState =
 
 mkRecords' ''PlayerInfo
 mkRecords' ''RunningGame
+mkRecords' ''NewGameParams
 mkRecords' ''Instance
+mkRecords' ''InstanceDetails
 mkRecords' ''InstanceView
+mkRecords' ''InstanceViewDetails
 mkRecords' ''ServerState
 mkRecords' ''ServerRequest

@@ -36,6 +36,7 @@ import Network.HTTP.Affjax
 import Network.HTTP.StatusCode
 
 import Components.PlayerInfo as PlayerInfo
+import Components.NewGameParams as NewGameParams
 
 import Splendor.Types
 import Splendor.Rules
@@ -58,6 +59,7 @@ instance eqActionSelection :: Eq ActionSelection where
 type ClientState =
     { clientKey :: String
     , playerInfo :: PlayerInfo
+    , newGameParams :: NewGameParams
     , instanceList :: StrMap InstanceSummary
     , currentLobbyKey :: Maybe String
     , currentInstance :: Maybe InstanceView
@@ -67,8 +69,12 @@ type ClientState =
 _playerInfo :: forall a b r. Lens { playerInfo :: a | r } { playerInfo :: b | r } a b
 _playerInfo = lens _.playerInfo (_ { playerInfo = _ })
 
+_newGameParams :: forall a b r. Lens { newGameParams :: a | r } { newGameParams :: b | r } a b
+_newGameParams = lens _.newGameParams (_ { newGameParams = _ })
+
 data ClientAction
     = OnPlayerInfo PlayerInfo.PlayerInfoAction
+    | OnNewGameParams NewGameParams.NewGameParamsAction
     | NewLobbyAction
     | JoinLobbyAction String
     | LeaveLobbyAction
@@ -113,6 +119,7 @@ initializeState = do
     pure $
         { clientKey: key
         , playerInfo: pInfo
+        , newGameParams: NewGameParams.defaultParams
         , instanceList: StrMap.empty :: StrMap InstanceSummary
         , currentLobbyKey: Nothing
         , currentInstance: Nothing
@@ -157,7 +164,7 @@ refreshGame rthis = do
         Nothing -> pure unit
         Just lobbyKey ->
             case s.currentInstance of
-                Just (CompletedInstanceView _) -> pure unit
+                Just (InstanceView { details: CompletedInstanceView _ }) -> pure unit
                 _ -> do
                     instState <- makeRequest (ServerRequest
                         { playerKey: s.clientKey
@@ -171,22 +178,28 @@ refreshGame rthis = do
 
 -- Lifted specs for subcomponents
 pInfoSpec = T.focusState _playerInfo PlayerInfo.spec
+newGameParamsSpec = T.focusState _newGameParams NewGameParams.spec
 
 render :: T.Render ClientState _ _
-render dispatch p state _ =
+render dispatch _ state _ =
     case state.currentInstance of
         Nothing ->
             case state.currentLobbyKey of
                 Nothing ->
                     [ R.div'
-                        [ R.div' $ (view T._render pInfoSpec) (dispatch <<< OnPlayerInfo)  p state []
+                        [ R.div' $ (view T._render pInfoSpec) (dispatch <<< OnPlayerInfo)  [] state []
                         , R.div
                             [ RP.className "instanceList" ]
                             (renderInstanceList dispatch [] state.instanceList [])
-                        , R.button
-                            [ RP.onClick \_ -> dispatch NewLobbyAction
-                            ]
-                            [ R.text "New Game"
+                        , R.div
+                            [ RP.className "newGameArea" ]
+                            [ R.div [] $
+                                (view T._render newGameParamsSpec) (dispatch <<< OnNewGameParams) [] state []
+                            , R.button
+                                [ RP.onClick \_ -> dispatch NewLobbyAction
+                                ]
+                                [ R.text "New Game"
+                                ]
                             ]
                         ]
                     ]
@@ -198,19 +211,27 @@ render dispatch p state _ =
                         [ R.text "Leave Game"
                         ]
                     ]
-        Just inst ->
-            case inst of
+        Just (InstanceView inst) ->
+            case inst.details of
                 WaitingInstanceView wiv ->
-                    [ R.div' $
-                        [ R.text "Waiting in lobby"
+                    [ R.div
+                        [ RP.className "lobbyName" ]
+                        [ R.text inst.name
+                        , R.text $
+                            " ("
+                            <> (show $ Array.length wiv.waitingPlayers)
+                            <> "/"
+                            <> (show $ wiv.maxPlayers)
+                            <> ")"
                         ]
-                    , R.div' $
-                        [ R.text "Players:" ]
-                        <> foldMap (\(PlayerInfo p) ->
+                    , R.div
+                        [ RP.className "lobbyPlayers" ]
+                        (foldMap (\(PlayerInfo p) ->
                             [ R.div
                                 [ RP.className "instancePlayer" ]
                                 [ R.text (shortenName p.displayName) ]
                             ]) wiv.waitingPlayers
+                        )
                     , R.button
                         [ RP.onClick \_ -> dispatch LeaveLobbyAction
                         ]
@@ -226,7 +247,7 @@ render dispatch p state _ =
                     [ R.div
                         [ RP.className "gameView"
                         ]
-                        (renderGameView state.currentSelection dispatch p (riv.runningGame) [])
+                        (renderGameView state.currentSelection dispatch [] (riv.runningGame) [])
                     ]
                 CompletedInstanceView civ ->
                     [ R.div
@@ -476,9 +497,16 @@ renderInstanceSummary dispatch _ (Tuple instKey (InstanceSummary is)) _ =
     [ R.div
         [ RP.className "instanceSummary" ]
         [ R.div
+            [ RP.className "instanceName" ]
+            [ R.text is.name ]
+        , R.div
             [ RP.className "instanceState" ]
             [ R.text (case is.state of
-                Waiting -> "Waiting"
+                Waiting -> "Waiting ("
+                    <> (show $ Array.length (is.players))
+                    <> "/"
+                    <> (fromMaybe "?" $ show <$> is.maxPlayers)
+                    <> ")"
                 Running -> "Running"
                 Completed -> "Completed"
             ) ]
@@ -905,18 +933,23 @@ performAction a p s =
     case a of
         OnPlayerInfo a' -> do
             (view T._performAction pInfoSpec) a' p s
+        OnNewGameParams a' -> do
+            (view T._performAction newGameParamsSpec) a' p s
         NewLobbyAction -> do
             newLobbyKey <- lift $ makeRequest (ServerRequest
                 { playerKey: s.clientKey
-                , requestData: NewLobby s.playerInfo
+                , requestData: NewLobby s.playerInfo s.newGameParams
                 })
             void $ T.cotransform (\state -> state { currentLobbyKey = newLobbyKey })
         JoinLobbyAction lobbyKey -> do
-            (_ :: Maybe Json) <- lift $ makeRequest (ServerRequest
+            (dat :: Maybe Json) <- lift $ makeRequest (ServerRequest
                 { playerKey: s.clientKey
                 , requestData: JoinLobby lobbyKey s.playerInfo
                 })
-            void $ T.cotransform (\state -> state { currentLobbyKey = Just lobbyKey })
+            case dat of
+                Nothing -> pure unit
+                Just _ -> do
+                    void $ T.cotransform (\state -> state { currentLobbyKey = Just lobbyKey })
         LeaveLobbyAction -> do
             case s.currentLobbyKey of
                 Nothing -> pure unit
@@ -941,7 +974,16 @@ performAction a p s =
             void $ T.cotransform (\state -> state { currentSelection = Nothing })
         SelectChip color -> do
             case s.currentInstance of
-                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { playerPosition: idx, currentRequest: ActionRequest ar } } }) ->
+                Just (InstanceView
+                        { details: RunningInstanceView
+                            { runningGame: RunningGame
+                                { gameState: GameView
+                                    { playerPosition: idx
+                                    , currentRequest: ActionRequest ar
+                                    }
+                                }
+                            }
+                        }) ->
                     if ar.player == idx
                     then case ar.type_ of
                         TurnRequest ->
@@ -959,7 +1001,16 @@ performAction a p s =
                 _ -> pure unit
         SelectCard cardId -> do
             case s.currentInstance of
-                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { playerPosition: idx, currentRequest: ActionRequest ar } } }) ->
+                Just (InstanceView
+                    { details: RunningInstanceView
+                        { runningGame: RunningGame
+                            { gameState: GameView
+                                { playerPosition: idx
+                                , currentRequest: ActionRequest ar
+                                }
+                            }
+                        }
+                    }) ->
                     if ar.player == idx
                     then case ar.type_ of
                         TurnRequest ->
@@ -971,7 +1022,16 @@ performAction a p s =
                 _ -> pure unit
         SelectTopDeck tier -> do
             case s.currentInstance of
-                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { playerPosition: idx, currentRequest: ActionRequest ar } } }) ->
+                Just (InstanceView
+                    { details: RunningInstanceView
+                        { runningGame: RunningGame
+                            { gameState: GameView
+                                { playerPosition: idx
+                                , currentRequest: ActionRequest ar
+                                }
+                            }
+                        }
+                    }) ->
                     if ar.player == idx
                     then case ar.type_ of
                         TurnRequest ->
@@ -983,7 +1043,16 @@ performAction a p s =
                 _ -> pure unit
         SelectAvailableNoble nid -> do
             case s.currentInstance of
-                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { playerPosition: idx, currentRequest: ActionRequest ar } } }) ->
+                Just (InstanceView
+                    { details: RunningInstanceView
+                        { runningGame: RunningGame
+                            { gameState: GameView
+                                { playerPosition: idx
+                                , currentRequest: ActionRequest ar
+                                }
+                            }
+                        }
+                    }) ->
                     if ar.player == idx
                     then case ar.type_ of
                         SelectNobleRequest ->
@@ -995,7 +1064,16 @@ performAction a p s =
                 _ -> pure unit
         AddToDiscard ctype -> do
             case s.currentInstance of
-                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { playerPosition: idx, currentRequest: ActionRequest ar } } }) ->
+                Just (InstanceView
+                    { details: RunningInstanceView
+                        { runningGame: RunningGame
+                            { gameState: GameView
+                                { playerPosition: idx
+                                , currentRequest: ActionRequest ar
+                                }
+                            }
+                        }
+                    }) ->
                     if ar.player == idx
                     then case ar.type_ of
                         DiscardChipRequest _ ->
@@ -1008,7 +1086,16 @@ performAction a p s =
                 _ -> pure unit
         RemoveFromDiscard ctype -> do
             case s.currentInstance of
-                Just (RunningInstanceView { runningGame: RunningGame { gameState: GameView { playerPosition: idx, currentRequest: ActionRequest ar } } }) ->
+                Just (InstanceView
+                    { details: RunningInstanceView
+                        { runningGame: RunningGame
+                            { gameState: GameView
+                                { playerPosition: idx
+                                , currentRequest: ActionRequest ar
+                                }
+                            }
+                        }
+                    }) ->
                     if ar.player == idx
                     then case ar.type_ of
                         DiscardChipRequest _ ->

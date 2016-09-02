@@ -777,8 +777,10 @@ instance encodeInstanceState :: EncodeJson InstanceState where
             Completed -> encodeJson "Completed"
 
 newtype InstanceSummary = InstanceSummary
-    { players :: Array PlayerInfo
+    { name :: String
+    , players :: Array PlayerInfo
     , state :: InstanceState
+    , maxPlayers :: Maybe Int
     }
 
 derive instance genericInstanceSummary :: Generic InstanceSummary
@@ -789,22 +791,29 @@ instance showInstanceSummary :: Show InstanceSummary where
 instance decodeInstanceSummary :: DecodeJson InstanceSummary where
     decodeJson json = do
         obj <- decodeJson json
+        name <- obj .? "_name"
         players <- obj .? "_players"
         state <- obj .? "_state"
+        maxPlayers <- obj .? "_maxPlayers"
         pure $ InstanceSummary
-            { players: players
+            { name: name
+            , players: players
             , state: state
+            , maxPlayers: maxPlayers
             }
 
 instance encodeInstanceSummary :: EncodeJson InstanceSummary where
     encodeJson (InstanceSummary is) =
-        "_players" := is.players
+        "_name" := is.name
+        ~> "_players" := is.players
         ~> "_state" := is.state
+        ~> "_maxPlayers" := is.maxPlayers
         ~> jsonEmptyObject
 
-data InstanceView
+data InstanceViewDetails
     = WaitingInstanceView
         { waitingPlayers :: Array PlayerInfo
+        , maxPlayers :: Int
         }
     | RunningInstanceView
         { runningGame :: RunningGame GameView
@@ -814,15 +823,17 @@ data InstanceView
         , result :: GameResult
         }
 
-instance decodeInstanceView :: DecodeJson InstanceView where
+instance decodeInstanceViewDetails :: DecodeJson InstanceViewDetails where
     decodeJson json = do
         obj <- decodeJson json
         tag <- obj .? "tag"
         case tag of
             "WaitingInstanceView" -> do
                 waitingPlayers <- obj .? "_waitingPlayers"
+                maxPlayers <- obj .? "_maxPlayers"
                 pure $ WaitingInstanceView
                     { waitingPlayers: waitingPlayers
+                    , maxPlayers: maxPlayers
                     }
             "RunningInstanceView" -> do
                 runningGame <- obj .? "_runningGame"
@@ -838,12 +849,13 @@ instance decodeInstanceView :: DecodeJson InstanceView where
                     }
             _ -> Left "Invalid InstanceView tag"
 
-instance encodeInstanceView :: EncodeJson InstanceView where
-    encodeJson iv =
-        case iv of
+instance encodeInstanceViewDetails :: EncodeJson InstanceViewDetails where
+    encodeJson ivd =
+        case ivd of
             WaitingInstanceView wiv ->
                 "tag" := "WaitingInstanceView"
                 ~> "_waitingPlayers" := wiv.waitingPlayers
+                ~> "_maxPlayers" := wiv.maxPlayers
                 ~> jsonEmptyObject
             RunningInstanceView riv ->
                 "tag" := "RunningInstanceView"
@@ -854,6 +866,28 @@ instance encodeInstanceView :: EncodeJson InstanceView where
                 ~> "_completedGame" := civ.completedGame
                 ~> "_result" := civ.result
                 ~> jsonEmptyObject
+
+newtype InstanceView
+    = InstanceView
+        { name :: String
+        , details :: InstanceViewDetails
+        }
+
+instance decodeInstanceView :: DecodeJson InstanceView where
+    decodeJson json = do
+        obj <- decodeJson json
+        name <- obj .? "_name"
+        details <- obj .? "_details"
+        pure $ InstanceView
+            { name: name
+            , details: details
+            }
+
+instance encodeInstanceView :: EncodeJson InstanceView where
+    encodeJson (InstanceView iv) =
+        "_name" := iv.name
+        ~> "_details" := iv.details
+        ~> jsonEmptyObject
 
 newtype ServerRequest a = ServerRequest
     { playerKey :: String
@@ -876,9 +910,33 @@ instance encodeJsonServerRequest :: EncodeJson a => EncodeJson (ServerRequest a)
         ~> "_requestData" := sr.requestData
         ~> jsonEmptyObject
 
+newtype NewGameParams
+    = NewGameParams
+        { name :: String
+        , maxPlayers :: Int
+        }
+
+derive instance genericNewGameParams :: Generic NewGameParams
+
+instance decodeJsonNewGameParams :: DecodeJson NewGameParams where
+    decodeJson json = do
+        obj <- decodeJson json
+        name <- obj .? "_name"
+        maxPlayers <- obj .? "_maxPlayers"
+        pure $ NewGameParams
+            { name: name
+            , maxPlayers: maxPlayers
+            }
+
+instance encodeJsonNewGameParams :: EncodeJson NewGameParams where
+    encodeJson (NewGameParams params) =
+        "_name" := params.name
+        ~> "_maxPlayers" := params.maxPlayers
+        ~> jsonEmptyObject
+
 data RequestData
     = ListLobbies
-    | NewLobby PlayerInfo
+    | NewLobby PlayerInfo NewGameParams
     | JoinLobby String PlayerInfo
     | LeaveLobby String
     | StartGame String
@@ -892,8 +950,8 @@ instance decodeJsonRequestData :: DecodeJson RequestData where
         case tag of
             "ListLobbies" -> pure ListLobbies
             "NewLobby" -> do
-                pInfo <- obj .? "contents"
-                pure $ NewLobby pInfo
+                Tuple pInfo params <- obj .? "contents"
+                pure $ NewLobby pInfo params
             "JoinLobby" -> do
                 Tuple lobbyKey pInfo <- obj .? "contents"
                 pure $ JoinLobby lobbyKey pInfo
@@ -918,9 +976,9 @@ instance encodeJsonRequestData :: EncodeJson RequestData where
                 "tag" := "ListLobbies"
                 ~> "contents" := jsonEmptyArray
                 ~> jsonEmptyObject
-            NewLobby pInfo ->
+            NewLobby pInfo params ->
                 "tag" := "NewLobby"
-                ~> "contents" := pInfo
+                ~> "contents" := Tuple pInfo params
                 ~> jsonEmptyObject
             JoinLobby lobbyKey pInfo ->
                 "tag" := "JoinLobby"

@@ -8,12 +8,14 @@ import Control.Concurrent.STM
 import Control.Exception
 import Control.Lens
 import Control.Monad (forever, guard, when)
-import Data.Aeson
+import Control.Monad.State (runState)
+import Data.Aeson hiding ((.=))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy
 import Data.Foldable
 import qualified Data.Map as Map
+import Data.Monoid
 import Data.String
 import qualified Data.Text as Text
 import Data.Time.Clock
@@ -41,74 +43,103 @@ work svar req = do
             servState <- readTVarIO svar
             case Map.lookup gameKey (servState^.instances) of
                 Nothing -> pure $ ErrorResponse "No such game"
-                Just (WaitingInstance {}) -> pure $ ErrorResponse "Game isn't started"
-                Just (CompletedInstance {}) -> pure $ ErrorResponse "Game is already complete"
-                Just (RunningInstance { _playerKeys = instKeys, _runningGame = instRG }) -> do
-                    case Map.lookup (req^.playerKey) instKeys of
-                        Nothing -> pure $ ErrorResponse "Requesting player is not in the game"
-                        Just idx -> do
-                            case runAction idx act (instRG^.gameState) of
-                                Nothing -> pure $ ErrorResponse "Invalid game action"
-                                Just (res, gs') -> do
-                                    case res of
-                                        Nothing -> do
-                                            atomically $ modifyTVar svar (\servState -> servState
-                                                & instances . ix gameKey . runningGame . gameState .~ gs'
-                                                & instances . ix gameKey . lastUpdated .~ curTime
-                                                )
-                                            pure $ OkResponse (toJSON ())
-                                        Just winners -> do
-                                            let completeGame = instRG { _gameState = gs' }
-                                            atomically . modifyTVar svar $
-                                                instances . at gameKey .~ Just (CompletedInstance
-                                                    { _playerKeys = instKeys
-                                                    , _completedGame = completeGame
-                                                    , _result = winners
-                                                    , _lastUpdated = curTime
-                                                    })
-                                            writeGame gameKey completeGame winners curTime
-                                            pure $ OkResponse (toJSON ())
-        NewLobby pInfo -> do
+                Just inst -> do
+                    case inst^.details of
+                        WaitingInstance {} -> pure $ ErrorResponse "Game isn't started"
+                        CompletedInstance {} -> pure $ ErrorResponse "Game is already complete"
+                        RunningInstance { _playerKeys = instKeys, _runningGame = instRG } -> do
+                            case Map.lookup (req^.playerKey) instKeys of
+                                Nothing -> pure $ ErrorResponse "Requesting player is not in the game"
+                                Just idx -> do
+                                    case runAction idx act (instRG^.gameState) of
+                                        Nothing -> pure $ ErrorResponse "Invalid game action"
+                                        Just (res, gs') -> do
+                                            case res of
+                                                Nothing -> do
+                                                    atomically $ modifyTVar svar (\servState -> servState
+                                                        & instances . ix gameKey . details . runningGame . gameState .~ gs'
+                                                        & instances . ix gameKey . lastUpdated .~ curTime
+                                                        )
+                                                    pure $ OkResponse (toJSON ())
+                                                Just winners -> do
+                                                    let completeGame = instRG { _gameState = gs' }
+                                                    atomically . modifyTVar svar $
+                                                        instances . at gameKey .~ Just (Instance
+                                                            { _name = inst^.name
+                                                            , _lastUpdated = curTime
+                                                            , _details = CompletedInstance
+                                                                { _playerKeys = instKeys
+                                                                , _completedGame = completeGame
+                                                                , _result = winners
+                                                                }
+                                                            })
+                                                    writeGame gameKey completeGame winners curTime
+                                                    pure $ OkResponse (toJSON ())
+        NewLobby pInfo params -> do
             let pInfo' =
                     pInfo & displayName %~ Text.take 100
             servState <- atomically $ readTVar svar
-            if any (\lob -> lob^.ownerKey == req^.playerKey) (servState^.instances)
+            if any (\lob -> lob^?details.ownerKey == Just (req^.playerKey)) (servState^.instances)
             then
                 pure $ ErrorResponse "Player already owns an unstarted game"
             else do
                 newInstanceId <- newIdentifier
                 atomically $ do
                     modifyTVar svar $
-                        instances . at newInstanceId .~ Just (WaitingInstance
-                            { _waitingPlayers = [(req^.playerKey, pInfo')]
-                            , _ownerKey = req^.playerKey
-                            , _lastUpdated = curTime
+                        instances . at newInstanceId .~ Just (Instance
+                            { _lastUpdated = curTime
+                            , _name = if Text.null (params^.name)
+                                then Text.take 20 (pInfo'^.displayName) <> "...'s game"
+                                else Text.take 100 (params^.name)
+                            , _details = WaitingInstance
+                                { _waitingPlayers = [(req^.playerKey, pInfo')]
+                                , _maxPlayers = params^.maxPlayers
+                                , _ownerKey = req^.playerKey
+                                }
                             })
                 pure $ OkResponse (toJSON newInstanceId)
         JoinLobby lobbyKey pInfo -> do
-            let pInfo' =
-                    pInfo & displayName %~ Text.take 100
+            let pInfo' = pInfo & displayName %~ Text.take 100
+            curTime <- getCurrentTime
             atomically $ do
                 servState <- readTVar svar
                 case servState^.instances.at lobbyKey of
                     Nothing -> pure $ ErrorResponse "No such game"
-                    Just (inst@WaitingInstance {}) -> do
-                        modifyTVar svar $
-                            instances . ix lobbyKey . waitingPlayers %~ addPlayer (req^.playerKey) pInfo'
-                        pure $ OkResponse (toJSON ())
+                    Just (inst@Instance{_details = WaitingInstance { _maxPlayers = m }}) -> do
+                        success <- do
+                            s <- readTVar svar
+                            let (a, s') = flip runState s $ do
+                                    currentPlayers <- use (instances . ix lobbyKey . details . waitingPlayers)
+                                    if any (\(key, _) -> key == req^.playerKey) currentPlayers
+                                    then pure True
+                                    else if (length currentPlayers < m)
+                                        then do
+                                            instances . ix lobbyKey . details . waitingPlayers %= addPlayer (req^.playerKey) pInfo'
+                                            instances . ix lobbyKey . lastUpdated .= curTime
+                                            pure True
+                                        else pure False
+                            writeTVar svar s'
+                            pure a
+                        if success
+                        then pure $ OkResponse (toJSON ())
+                        else pure $ ErrorResponse "Game is full"
                     Just _ -> pure $ ErrorResponse "Game already started"
         LeaveLobby lobbyKey -> do
+            curTime <- getCurrentTime
             atomically $ do
                 modifyTVar svar $
                     instances . at lobbyKey %~ (\case
-                        Just (inst@(WaitingInstance
-                              { _waitingPlayers = players
-                              , _ownerKey = owner
-                              , _lastUpdated = curTime
-                              })) ->
+                        Just (inst@(Instance
+                                { _details = WaitingInstance
+                                      { _waitingPlayers = players
+                                      , _ownerKey = owner
+                                      }
+                                })) ->
                             if owner == req^.playerKey
                             then Nothing
-                            else Just $ inst & waitingPlayers %~ filter ((/= req^.playerKey) . fst)
+                            else Just $ inst
+                                & lastUpdated .~ curTime
+                                & details . waitingPlayers %~ filter ((/= req^.playerKey) . fst)
                         inst -> inst
                         )
             pure $ OkResponse (toJSON ())
@@ -127,7 +158,7 @@ work svar req = do
                 servState <- readTVarIO svar
                 pure (servState ^. instances . at instanceKey)
             case lobbyData of
-                Just (WaitingInstance { _waitingPlayers = players, _ownerKey = owner }) -> do
+                Just (Instance { _name = n, _details = WaitingInstance { _waitingPlayers = players, _ownerKey = owner }}) -> do
                     if req^.playerKey == owner
                     then do
                         playerOrder <- shuffleM players
@@ -135,14 +166,17 @@ work svar req = do
                         case gameStart of
                             Nothing -> pure $ ErrorResponse "Error attempting to start game"
                             Just gs -> atomically $ do
-                                let inst = RunningInstance
-                                        { _playerKeys = Map.fromList (zip (map fst playerOrder) [0..])
-                                        , _runningGame = RunningGame
-                                            { _players = Map.fromList (zip [0..] (map snd playerOrder))
-                                            , _version = 0
-                                            , _gameState = gs
-                                            }
+                                let inst = Instance
+                                        { _name = n
                                         , _lastUpdated = curTime
+                                        , _details = RunningInstance
+                                            { _playerKeys = Map.fromList (zip (map fst playerOrder) [0..])
+                                            , _runningGame = RunningGame
+                                                { _players = Map.fromList (zip [0..] (map snd playerOrder))
+                                                , _version = 0
+                                                , _gameState = gs
+                                                }
+                                            }
                                         }
                                 modifyTVar svar $ \servState -> servState
                                     & instances . at instanceKey .~ Just inst
@@ -178,29 +212,39 @@ addPlayer key pinfo players =
 
 summarizeInstance :: Instance -> InstanceSummary
 summarizeInstance inst =
-    case inst of
-        WaitingInstance { _waitingPlayers = players } ->
+    case inst^.details of
+        WaitingInstance { _waitingPlayers = players, _maxPlayers = m } ->
             InstanceSummary
-                { _players = map snd players
-                , _state = Waiting
+                { _name = inst^.name
+                , _players = map snd players
+                , _state = Waiting 
+                , _maxPlayers = Just m
                 }
         RunningInstance { _runningGame = rg } ->
             InstanceSummary
-                { _players = toList (rg^.players)
+                { _name = inst^.name
+                , _players = toList (rg^.players)
                 , _state = Running
+                , _maxPlayers = Nothing
                 }
         CompletedInstance { _completedGame = rg } ->
             InstanceSummary
-                { _players = toList (rg^.players)
+                { _name = inst^.name
+                , _players = toList (rg^.players)
                 , _state = Completed
+                , _maxPlayers = Nothing
                 }
 
 viewInstance :: String -> Instance -> Maybe InstanceView
 viewInstance playerKey inst =
-    case inst of
-        WaitingInstance { _waitingPlayers = players } ->
-            Just $ WaitingInstanceView
-                { _waitingPlayers = map snd players
+    case inst^.details of
+        WaitingInstance { _waitingPlayers = players, _maxPlayers = m } ->
+            Just $ InstanceView
+                { _name = inst^.name
+                , _details = WaitingInstanceView
+                    { _waitingPlayers = map snd players
+                    , _maxPlayers = m
+                    }
                 }
         RunningInstance
                 { _playerKeys = keyMap
@@ -209,16 +253,22 @@ viewInstance playerKey inst =
             case keyMap ^. at playerKey of
                 Nothing -> Nothing
                 Just idx ->
-                    Just $ RunningInstanceView
-                        { _runningGame = viewGame idx <$> rg
+                    Just $ InstanceView
+                        { _name = inst^.name
+                        , _details = RunningInstanceView
+                            { _runningGame = viewGame idx <$> rg
+                            }
                         }
         CompletedInstance
                 { _completedGame = cg
                 , _result = res
                 } ->
-            Just $ CompletedInstanceView
-                { _completedGame = cg
-                , _result = res
+            Just $ InstanceView
+                { _name = inst^.name
+                , _details = CompletedInstanceView
+                    { _completedGame = cg
+                    , _result = res
+                    }
                 }
 
 mainPage :: Html ()

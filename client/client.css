@@ -320,13 +320,20 @@ table {
     margin: 2px;
 }
 
-.instanceState {
-    margin-left: 3px;
-    margin-right: 50px;
-    font-size: 20px;
+.instanceSummary .instanceName {
+    width: 170px;
+    margin-right: 20px;
+    font-size: 18px;
+    overflow: hidden;
 }
 
-.instancePlayers {
+.instanceSummary .instanceState {
+    margin-left: 3px;
+    margin-right: 50px;
+    font-size: 18px;
+}
+
+.instanceSummary .instancePlayers {
     display: flex;
 }
 
@@ -357,4 +364,9 @@ table {
     -webkit-box-shadow: none;
     -moz-box-shadow: none;
     box-shadow: none;
+}
+
+.newGameArea {
+    margin-top: 10px;
+    display: flex;
 }
